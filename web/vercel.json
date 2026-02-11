@@ -1,11 +1,4 @@
 {
   "buildCommand": "next build",
-  "outputDirectory": ".next",
-  "routes": [
-    {
-      "src": "/api/webhook",
-      "dest": "/api/webhook.py",
-      "methods": ["POST"]
-    }
-  ]
+  "outputDirectory": ".next"
 }
