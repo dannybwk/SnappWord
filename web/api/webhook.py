@@ -1,0 +1,193 @@
+"""
+LINE Webhook handler for SnappWord 截詞.
+
+Architecture: Async reply pattern
+1. Receive image → reply "analyzing..." instantly
+2. Process in background → push result via Push Message API
+"""
+
+from __future__ import annotations
+
+import asyncio
+import traceback
+from urllib.parse import parse_qs
+
+from fastapi import FastAPI, Request, HTTPException
+
+from _lib import config
+from _lib.line_client import (
+    verify_signature,
+    reply_loading,
+    push_message,
+    get_message_content,
+    reply_text,
+)
+from _lib.gemini_client import analyze_screenshot
+from _lib.supabase_client import (
+    get_or_create_user,
+    upload_image,
+    save_vocab_cards,
+    update_card_status,
+    log_event,
+)
+from _lib.flex_messages import (
+    build_vocab_carousel,
+    build_error_message,
+    build_save_confirmation,
+)
+
+app = FastAPI()
+
+
+@app.post("/api/webhook")
+async def webhook(request: Request):
+    """LINE Webhook endpoint."""
+    body = await request.body()
+    signature = request.headers.get("X-Line-Signature", "")
+
+    if not verify_signature(body, signature):
+        raise HTTPException(status_code=403, detail="Invalid signature")
+
+    payload = await request.json()
+    events = payload.get("events", [])
+
+    for event in events:
+        # Fire-and-forget: don't block the webhook response
+        asyncio.ensure_future(_handle_event(event))
+
+    return {"status": "ok"}
+
+
+async def _handle_event(event: dict) -> None:
+    """Route event to appropriate handler."""
+    event_type = event.get("type")
+    try:
+        if event_type == "message":
+            await _handle_message(event)
+        elif event_type == "postback":
+            await _handle_postback(event)
+    except Exception:
+        traceback.print_exc()
+
+
+async def _handle_message(event: dict) -> None:
+    """Handle incoming messages (image or text)."""
+    message = event.get("message", {})
+    msg_type = message.get("type")
+    reply_token = event.get("replyToken", "")
+    line_user_id = event["source"]["userId"]
+
+    if msg_type == "image":
+        # Step 1: Immediately reply with loading indicator
+        await reply_loading(reply_token)
+
+        # Step 2: Process asynchronously, then push result
+        await _process_screenshot(line_user_id, message["id"])
+
+    elif msg_type == "text":
+        text = message.get("text", "").strip()
+        await _handle_text_command(reply_token, line_user_id, text)
+
+    else:
+        await reply_text(
+            reply_token,
+            "📸 請傳送截圖給我！\n我會幫你把圖片中的生字變成單字卡 ✨",
+        )
+
+
+async def _process_screenshot(line_user_id: str, message_id: str) -> None:
+    """Full pipeline: download → upload → AI analyze → store → push card."""
+    user = get_or_create_user(line_user_id)
+    user_id = user["id"]
+
+    try:
+        # Download image from LINE
+        image_bytes = await get_message_content(message_id)
+
+        log_event(user_id, "image_received", payload={"message_id": message_id})
+
+        # Upload to Supabase Storage
+        image_url = upload_image(image_bytes, user_id)
+
+        # AI analysis
+        parse_result, metadata = analyze_screenshot(image_bytes)
+
+        log_event(
+            user_id,
+            "gemini_call",
+            latency_ms=metadata.get("latency_ms"),
+            token_count=metadata.get("token_count"),
+            payload={"word_count": len(parse_result.words)},
+        )
+
+        if not parse_result.words:
+            await push_message(line_user_id, [
+                build_error_message(
+                    "我在這張截圖中沒有找到可以學習的單字 🤔\n"
+                    "試試傳送 Duolingo、Netflix 字幕或文章的截圖！"
+                )
+            ])
+            return
+
+        # Save to database
+        saved_cards = save_vocab_cards(user_id, image_url, parse_result)
+
+        log_event(user_id, "parse_success", payload={
+            "cards_saved": len(saved_cards),
+            "source_app": parse_result.source_app,
+        })
+
+        # Build and send Flex Message
+        word_card_pairs = [
+            (w, card["id"])
+            for w, card in zip(parse_result.words, saved_cards)
+        ]
+        flex_msg = build_vocab_carousel(word_card_pairs, parse_result.source_app)
+        await push_message(line_user_id, [flex_msg])
+
+    except Exception as e:
+        traceback.print_exc()
+        log_event(user_id, "parse_fail", payload={"error": str(e)})
+        await push_message(line_user_id, [
+            build_error_message(
+                "處理截圖時發生錯誤 😅\n請稍後重試，或換一張更清晰的截圖。"
+            )
+        ])
+
+
+async def _handle_text_command(reply_token: str, line_user_id: str, text: str) -> None:
+    """Handle text commands like help, review, etc."""
+    lower = text.lower()
+
+    if lower in ("help", "幫助", "說明"):
+        await reply_text(
+            reply_token,
+            "📸 使用方式：\n\n"
+            "1. 在任何 App 截圖（Duolingo、Netflix、文章...）\n"
+            "2. 把截圖傳給我\n"
+            "3. 3-5 秒內收到精美單字卡！\n\n"
+            "就是這麼簡單 ✨",
+        )
+    else:
+        await reply_text(
+            reply_token,
+            "📸 請傳送截圖給我，我來幫你提取單字！\n"
+            "輸入「幫助」查看使用說明。",
+        )
+
+
+async def _handle_postback(event: dict) -> None:
+    """Handle postback actions from Flex Message buttons."""
+    data_str = event.get("postback", {}).get("data", "")
+    reply_token = event.get("replyToken", "")
+    params = parse_qs(data_str)
+
+    action = params.get("action", [""])[0]
+    card_id = params.get("card_id", [""])[0]
+
+    if action == "save" and card_id:
+        update_card_status(card_id, 1)  # 1 = Learning
+        await reply_text(reply_token, "✅ 已存入你的單字本！明天早上會推播複習提醒喔 📚")
+
+    elif action == "skip" and card_id:
+        await reply_text(reply_token, "⏭ 已跳過")

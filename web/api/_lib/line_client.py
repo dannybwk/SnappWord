@@ -1,0 +1,73 @@
+"""LINE Messaging API client wrapper."""
+
+from __future__ import annotations
+
+import hashlib
+import hmac
+import base64
+
+import httpx
+
+from . import config
+
+LINE_API_BASE = "https://api.line.me/v2/bot"
+
+
+def verify_signature(body: bytes, signature: str) -> bool:
+    """Verify LINE webhook signature."""
+    mac = hmac.new(
+        config.LINE_CHANNEL_SECRET.encode("utf-8"),
+        body,
+        hashlib.sha256,
+    )
+    expected = base64.b64encode(mac.digest()).decode("utf-8")
+    return hmac.compare_digest(expected, signature)
+
+
+def _headers() -> dict:
+    return {
+        "Authorization": f"Bearer {config.LINE_CHANNEL_ACCESS_TOKEN}",
+        "Content-Type": "application/json",
+    }
+
+
+async def reply_message(reply_token: str, messages: list[dict]) -> None:
+    """Send reply using reply token (must be within 30s of webhook)."""
+    async with httpx.AsyncClient() as client:
+        await client.post(
+            f"{LINE_API_BASE}/message/reply",
+            headers=_headers(),
+            json={"replyToken": reply_token, "messages": messages},
+        )
+
+
+async def push_message(user_id: str, messages: list[dict]) -> None:
+    """Send push message to a user (no time limit)."""
+    async with httpx.AsyncClient() as client:
+        await client.post(
+            f"{LINE_API_BASE}/message/push",
+            headers=_headers(),
+            json={"to": user_id, "messages": messages},
+        )
+
+
+async def get_message_content(message_id: str) -> bytes:
+    """Download image/file content from LINE servers."""
+    url = f"https://api-data.line.me/v2/bot/message/{message_id}/content"
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, headers=_headers())
+        resp.raise_for_status()
+        return resp.content
+
+
+async def reply_text(reply_token: str, text: str) -> None:
+    """Quick helper to reply with a single text message."""
+    await reply_message(reply_token, [{"type": "text", "text": text}])
+
+
+async def reply_loading(reply_token: str) -> None:
+    """Reply with a 'processing' indicator message."""
+    await reply_text(
+        reply_token,
+        "🔍 AI 正在解析您的截圖...\n請稍候 3-5 秒，單字卡馬上就來！",
+    )
