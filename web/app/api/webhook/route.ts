@@ -29,17 +29,29 @@ export async function POST(request: NextRequest) {
   const body = await request.text();
   const signature = request.headers.get("x-line-signature") || "";
 
+  // Parse payload first — LINE verify sends empty events
+  let payload: { events?: LineEvent[] };
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const events: LineEvent[] = payload.events || [];
+
+  // LINE webhook verify: empty events → return 200 immediately
+  if (events.length === 0) {
+    return NextResponse.json({ status: "ok" });
+  }
+
+  // Verify signature for actual events
   if (!verifySignature(body, signature)) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 403 });
   }
 
-  const payload = JSON.parse(body);
-  const events: LineEvent[] = payload.events || [];
-
   // Fire-and-forget: process events without blocking the response
   // LINE expects 200 within a few seconds
   for (const event of events) {
-    // Don't await — let it run in the background via waitUntil-like pattern
     handleEvent(event).catch((err) =>
       console.error("Event handler error:", err)
     );
