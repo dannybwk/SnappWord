@@ -29,7 +29,28 @@ import type { LineEvent, ParsedWord } from "@/lib/server/types";
 // Allow up to 60s for Gemini processing (requires Vercel Pro for >10s)
 export const maxDuration = 60;
 
+/** GET — Health check & env diagnostics (no secrets exposed). */
+export async function GET() {
+  const hasSecret = !!process.env.LINE_CHANNEL_SECRET;
+  const hasToken = !!process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  const hasGemini = !!process.env.GEMINI_API_KEY;
+  const hasSupabaseUrl = !!process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const hasSupabaseKey = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  return NextResponse.json({
+    status: "ok",
+    env: {
+      LINE_CHANNEL_SECRET: hasSecret ? "SET" : "MISSING",
+      LINE_CHANNEL_ACCESS_TOKEN: hasToken ? "SET" : "MISSING",
+      GEMINI_API_KEY: hasGemini ? "SET" : "MISSING",
+      NEXT_PUBLIC_SUPABASE_URL: hasSupabaseUrl ? "SET" : "MISSING",
+      SUPABASE_SERVICE_ROLE_KEY: hasSupabaseKey ? "SET" : "MISSING",
+    },
+  });
+}
+
 export async function POST(request: NextRequest) {
+  console.log("[webhook] POST received");
   const body = await request.text();
   const signature = request.headers.get("x-line-signature") || "";
 
@@ -38,10 +59,12 @@ export async function POST(request: NextRequest) {
   try {
     payload = JSON.parse(body);
   } catch {
+    console.log("[webhook] Invalid JSON");
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
   const events: LineEvent[] = payload.events || [];
+  console.log(`[webhook] events: ${events.length}, types: ${events.map(e => e.type).join(",")}`);
 
   // LINE webhook verify: empty events → return 200 immediately
   if (events.length === 0) {
@@ -50,8 +73,10 @@ export async function POST(request: NextRequest) {
 
   // Verify signature for actual events
   if (!verifySignature(body, signature)) {
+    console.log("[webhook] Signature verification FAILED");
     return NextResponse.json({ error: "Invalid signature" }, { status: 403 });
   }
+  console.log("[webhook] Signature verified OK");
 
   // Return 200 immediately (LINE expects fast response),
   // but keep the serverless function alive to process events via waitUntil
