@@ -7,6 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { waitUntil } from "@vercel/functions";
 import {
   verifySignature,
   replyLoading,
@@ -24,6 +25,9 @@ import {
 } from "@/lib/server/supabase-server";
 import { buildVocabCarousel, buildErrorMessage } from "@/lib/server/flex-messages";
 import type { LineEvent, ParsedWord } from "@/lib/server/types";
+
+// Allow up to 60s for Gemini processing (requires Vercel Pro for >10s)
+export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   const body = await request.text();
@@ -49,13 +53,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 403 });
   }
 
-  // Fire-and-forget: process events without blocking the response
-  // LINE expects 200 within a few seconds
-  for (const event of events) {
-    handleEvent(event).catch((err) =>
-      console.error("Event handler error:", err)
-    );
-  }
+  // Return 200 immediately (LINE expects fast response),
+  // but keep the serverless function alive to process events via waitUntil
+  const processing = Promise.allSettled(
+    events.map((event) => handleEvent(event))
+  );
+  waitUntil(processing);
 
   return NextResponse.json({ status: "ok" });
 }
