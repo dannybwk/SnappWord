@@ -75,6 +75,7 @@ export default function TermsPage() {
                 <li>本服務的介面設計、程式碼、商標及其他智慧財產權歸 T+STUDIO 梯加創造所有。</li>
                 <li>您上傳的截圖內容之智慧財產權歸原著作權人所有。您保證擁有上傳截圖的合法使用權。</li>
                 <li>AI 生成的單字卡內容（翻譯、例句等）僅供個人學習使用。</li>
+                <li><strong className="text-earth">第三方商標聲明：</strong>本服務及網站中提及的所有第三方品牌名稱、商標及服務標誌（包括但不限於 Duolingo、Netflix、Anki、LINE、Google 等），其智慧財產權均歸各該公司或權利人所有。本服務與上述品牌無任何隸屬、贊助、授權或合作關係，所有提及僅為說明本服務適用情境之示意用途，不構成任何商業上的關聯或背書。</li>
               </ul>
             </section>
 
