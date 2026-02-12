@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { dashboardUser } from "@/lib/constants";
+import { useAuth } from "@/components/auth/AuthProvider";
 import ReviewQueue from "@/components/dashboard/ReviewQueue";
 import { WeeklyChart, LanguagePieChart, MasteryRing } from "@/components/dashboard/StatsCharts";
 import VocabTable from "@/components/dashboard/VocabTable";
@@ -16,8 +17,45 @@ function getGreeting(): string {
   return "晚安";
 }
 
+interface VocabCard {
+  id: string;
+  word: string;
+  translation: string;
+  pronunciation: string;
+  source_app: string;
+  review_status: number;
+  created_at: string;
+}
+
 export default function DashboardPage() {
   const greeting = getGreeting();
+  const { user } = useAuth();
+  const [cards, setCards] = useState<VocabCard[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user?.dbUserId) return;
+
+    async function fetchCards() {
+      try {
+        const res = await fetch(`/api/vocab?userId=${user!.dbUserId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setCards(data.cards || []);
+        }
+      } catch {
+        // fallback to empty
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchCards();
+  }, [user?.dbUserId]);
+
+  const totalWords = cards.length;
+  const dueForReview = cards.filter((c) => c.review_status === 1).length;
+  const displayName = user?.displayName || "學習者";
 
   return (
     <div className="max-w-5xl mx-auto space-y-8">
@@ -30,15 +68,22 @@ export default function DashboardPage() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h1 className="font-heading font-extrabold text-2xl text-earth">
-              🌿 {greeting}，{dashboardUser.name}！
+              🌿 {greeting}，{displayName}！
             </h1>
             <p className="text-earth-light mt-1">
-              你已經收集了 <span className="font-bold text-seed">{dashboardUser.totalWords}</span> 個單字
-              {dashboardUser.dueForReview > 0 && (
+              {loading ? (
+                "載入中..."
+              ) : (
                 <>
-                  ，今天有{" "}
-                  <span className="font-bold text-bloom">{dashboardUser.dueForReview}</span>{" "}
-                  個單字需要複習
+                  你已經收集了{" "}
+                  <span className="font-bold text-seed">{totalWords}</span> 個單字
+                  {dueForReview > 0 && (
+                    <>
+                      ，有{" "}
+                      <span className="font-bold text-bloom">{dueForReview}</span>{" "}
+                      個單字待複習
+                    </>
+                  )}
                 </>
               )}
             </p>
