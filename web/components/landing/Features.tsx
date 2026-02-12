@@ -106,7 +106,7 @@ export default function Features() {
           {/* Large card - AI */}
           <FeatureCard
             title="AI 智能辨識"
-            description="Gemini 1.5 Flash 多模態 AI，能理解截圖中的文字、語境、甚至是手寫筆記。不只辨識單字，還生成例句和語境解釋。"
+            description="多模態 AI，能理解截圖中的文字、語境、甚至是手寫筆記。不只辨識單字，還生成例句和語境解釋。"
             icon="🧠"
             className="sm:col-span-2 lg:col-span-2 lg:row-span-2"
             delay={0}

@@ -75,7 +75,7 @@ export default function FinalCTA() {
           </Button>
 
           <span className="text-white/60 text-sm flex items-center gap-1">
-            🌱 免費開始，不需信用卡
+            🌱 免費開始：加好友->傳截圖->產生單字卡
           </span>
         </motion.div>
       </div>

@@ -125,50 +125,12 @@ export const supportedLanguages = [
   { name: "德語", flag: "🇩🇪" },
 ] as const;
 
-// ── Quiz mock data ──
-export const quizQuestions = [
-  {
-    id: 1,
-    word: "serendipity",
-    language: "英語",
-    correctAnswer: "意外的驚喜發現",
-    options: ["意外的驚喜發現", "悲傷的情緒", "快速移動", "深度思考"],
-  },
-  {
-    id: 2,
-    word: "mariposa",
-    language: "西班牙語",
-    correctAnswer: "蝴蝶",
-    options: ["蝴蝶", "花朵", "海洋", "星星"],
-  },
-  {
-    id: 3,
-    word: "懐かしい",
-    language: "日語",
-    correctAnswer: "令人懷念的",
-    options: ["令人懷念的", "開心的", "困難的", "美味的"],
-  },
-  {
-    id: 4,
-    word: "사랑",
-    language: "韓語",
-    correctAnswer: "愛",
-    options: ["愛", "夢", "友情", "希望"],
-  },
-  {
-    id: 5,
-    word: "ephemeral",
-    language: "英語",
-    correctAnswer: "短暫的",
-    options: ["短暫的", "永恆的", "巨大的", "微小的"],
-  },
-] as const;
-
 // ── Pricing plans ──
 export const pricingPlans = [
   {
     name: "免費種子",
     nameEn: "Seed",
+    tierId: "free" as const,
     price: 0,
     period: "永久免費",
     description: "開始你的語言花園之旅",
@@ -184,6 +146,7 @@ export const pricingPlans = [
   {
     name: "成長嫩芽",
     nameEn: "Sprout",
+    tierId: "sprout" as const,
     price: 99,
     period: "每月",
     description: "讓你的花園加速成長",
@@ -201,6 +164,7 @@ export const pricingPlans = [
   {
     name: "綻放花園",
     nameEn: "Bloom",
+    tierId: "bloom" as const,
     price: 249,
     period: "每月",
     description: "語言學習的終極花園",

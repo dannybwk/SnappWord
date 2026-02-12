@@ -30,11 +30,22 @@ interface Props {
 
 export default function ReviewQueue({ cards, loading }: Props) {
   const dueCards = useMemo(() => {
+    const now = Date.now();
     return cards
-      .filter((c) => c.review_status < 2)
+      .filter((c) => {
+        // New cards are always due
+        if (c.review_status === 0) return true;
+        // Cards past their next_review_at are due
+        if (c.next_review_at && new Date(c.next_review_at).getTime() <= now) return true;
+        return false;
+      })
       .sort((a, b) => {
-        // review_status 1 (marked for review) first, then 0 (new)
-        if (a.review_status !== b.review_status) return b.review_status - a.review_status;
+        // New cards (status 0) last, overdue cards first (most overdue = earliest next_review_at)
+        if (a.review_status === 0 && b.review_status !== 0) return 1;
+        if (a.review_status !== 0 && b.review_status === 0) return -1;
+        if (a.next_review_at && b.next_review_at) {
+          return new Date(a.next_review_at).getTime() - new Date(b.next_review_at).getTime();
+        }
         return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
       });
   }, [cards]);

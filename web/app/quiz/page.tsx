@@ -1,12 +1,30 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { quizQuestions } from "@/lib/constants";
+import { useAuth } from "@/components/auth/AuthProvider";
 import Button from "@/components/ui/Button";
 import Link from "next/link";
 
-type QuizState = "playing" | "answered" | "finished";
+interface QuizQuestion {
+  cardId: string;
+  word: string;
+  pronunciation: string;
+  language: string;
+  correctAnswer: string;
+  options: string[];
+}
+
+type QuizState = "loading" | "empty" | "need_more" | "playing" | "answered" | "finished";
+
+const langMap: Record<string, string> = {
+  en: "英語",
+  ja: "日語",
+  ko: "韓語",
+  es: "西班牙語",
+  fr: "法語",
+  de: "德語",
+};
 
 function ConfettiPiece({ index }: { index: number }) {
   const colors = ["#06C755", "#FFB7C5", "#FFE66D", "#74B9FF", "#A8E6CF"];
@@ -112,25 +130,72 @@ function ResultScreen({
 }
 
 export default function QuizPage() {
+  const { user, loading: authLoading } = useAuth();
+  const [questions, setQuestions] = useState<QuizQuestion[]>([]);
+  const [state, setState] = useState<QuizState>("loading");
   const [currentIndex, setCurrentIndex] = useState(0);
   const [score, setScore] = useState(0);
-  const [state, setState] = useState<QuizState>("playing");
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
+  const [totalDue, setTotalDue] = useState(0);
 
-  const question = quizQuestions[currentIndex];
-  const progress = ((currentIndex + (state === "answered" ? 1 : 0)) / quizQuestions.length) * 100;
+  const fetchQuiz = useCallback(async (userId: string) => {
+    setState("loading");
+    try {
+      const res = await fetch(`/api/quiz?userId=${userId}`);
+      if (!res.ok) throw new Error("Failed to fetch quiz");
+      const data = await res.json();
+
+      if (data.needMoreCards) {
+        setState("need_more");
+        return;
+      }
+
+      if (!data.questions || data.questions.length === 0) {
+        setTotalDue(data.totalDue || 0);
+        setState("empty");
+        return;
+      }
+
+      setQuestions(data.questions);
+      setTotalDue(data.totalDue || data.questions.length);
+      setCurrentIndex(0);
+      setScore(0);
+      setSelectedAnswer(null);
+      setState("playing");
+    } catch {
+      setState("empty");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!authLoading && user?.dbUserId) {
+      fetchQuiz(user.dbUserId);
+    }
+  }, [authLoading, user?.dbUserId, fetchQuiz]);
+
+  const question = questions[currentIndex];
+  const progress = questions.length > 0
+    ? ((currentIndex + (state === "answered" ? 1 : 0)) / questions.length) * 100
+    : 0;
 
   const handleAnswer = useCallback(
-    (answer: string) => {
-      if (state === "answered") return;
+    async (answer: string) => {
+      if (state === "answered" || !question) return;
       setSelectedAnswer(answer);
       setState("answered");
 
       const isCorrect = answer === question.correctAnswer;
       if (isCorrect) setScore((s) => s + 1);
 
+      // Submit answer to API (fire and forget)
+      fetch("/api/quiz", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cardId: question.cardId, correct: isCorrect }),
+      }).catch(() => {});
+
       setTimeout(() => {
-        if (currentIndex < quizQuestions.length - 1) {
+        if (currentIndex < questions.length - 1) {
           setCurrentIndex((i) => i + 1);
           setSelectedAnswer(null);
           setState("playing");
@@ -139,15 +204,89 @@ export default function QuizPage() {
         }
       }, 1500);
     },
-    [state, question.correctAnswer, currentIndex]
+    [state, question, currentIndex, questions.length]
   );
 
   const restart = useCallback(() => {
-    setCurrentIndex(0);
-    setScore(0);
-    setState("playing");
-    setSelectedAnswer(null);
-  }, []);
+    if (user?.dbUserId) {
+      fetchQuiz(user.dbUserId);
+    }
+  }, [user?.dbUserId, fetchQuiz]);
+
+  // Loading states
+  if (authLoading || state === "loading") {
+    return (
+      <div className="min-h-screen bg-cloud flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <motion.span
+            animate={{ rotate: 360 }}
+            transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+            className="text-4xl block"
+          >
+            🎯
+          </motion.span>
+          <p className="text-earth-light text-sm">準備測驗中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Not logged in
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-cloud flex items-center justify-center p-6">
+        <div className="text-center space-y-4">
+          <span className="text-5xl block">🔒</span>
+          <h2 className="font-heading font-extrabold text-xl text-earth">請先登入</h2>
+          <p className="text-earth-light text-sm">登入後即可開始測驗</p>
+          <Link href="/dashboard">
+            <Button>前往登入</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Need more cards
+  if (state === "need_more") {
+    return (
+      <div className="min-h-screen bg-cloud flex items-center justify-center p-6">
+        <div className="text-center space-y-4">
+          <span className="text-5xl block">📚</span>
+          <h2 className="font-heading font-extrabold text-xl text-earth">單字不夠</h2>
+          <p className="text-earth-light text-sm">
+            需要至少 4 個單字才能開始測驗<br />
+            去 LINE 傳更多截圖吧！
+          </p>
+          <Link href="/dashboard">
+            <Button variant="outline">回到 Dashboard</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // No due cards
+  if (state === "empty") {
+    return (
+      <div className="min-h-screen bg-cloud flex items-center justify-center p-6">
+        <div className="text-center space-y-4">
+          <span className="text-5xl block">🎉</span>
+          <h2 className="font-heading font-extrabold text-xl text-earth">
+            {totalDue === 0 ? "全部複習完了！" : "目前沒有待複習的單字"}
+          </h2>
+          <p className="text-earth-light text-sm">
+            {totalDue === 0
+              ? "太棒了！你的單字都記住了"
+              : "去 LINE 傳截圖來收集更多單字吧！"}
+          </p>
+          <Link href="/dashboard">
+            <Button variant="outline">回到 Dashboard</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-cloud flex flex-col">
@@ -171,7 +310,7 @@ export default function QuizPage() {
         </div>
 
         <span className="text-xs text-earth-light font-mono">
-          {currentIndex + 1}/{quizQuestions.length}
+          {currentIndex + 1}/{questions.length}
         </span>
       </div>
 
@@ -179,7 +318,7 @@ export default function QuizPage() {
       <div className="flex-1 flex items-center justify-center p-6">
         <div className="w-full max-w-lg">
           {state === "finished" ? (
-            <ResultScreen score={score} total={quizQuestions.length} onRestart={restart} />
+            <ResultScreen score={score} total={questions.length} onRestart={restart} />
           ) : (
             <AnimatePresence mode="wait">
               <motion.div
@@ -190,20 +329,23 @@ export default function QuizPage() {
                 transition={{ duration: 0.3 }}
                 className="space-y-8"
               >
-                {/* Language tag */}
+                {/* Language tag + word */}
                 <div className="text-center">
                   <span className="inline-block px-3 py-1 bg-sky-light text-sky rounded-full text-xs font-bold mb-4">
-                    {question.language}
+                    {langMap[question?.language] || question?.language}
                   </span>
                   <h2 className="font-heading font-extrabold text-4xl sm:text-5xl text-earth">
-                    {question.word}
+                    {question?.word}
                   </h2>
+                  {question?.pronunciation && (
+                    <p className="text-earth-light/60 mt-1 text-sm">{question.pronunciation}</p>
+                  )}
                   <p className="text-earth-light mt-2 text-sm">這個詞是什麼意思？</p>
                 </div>
 
                 {/* Options */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {question.options.map((option) => {
+                  {question?.options.map((option) => {
                     const isCorrect = option === question.correctAnswer;
                     const isSelected = option === selectedAnswer;
                     const isAnswered = state === "answered";

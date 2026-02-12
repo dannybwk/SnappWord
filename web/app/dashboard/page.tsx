@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuth } from "@/components/auth/AuthProvider";
 import ReviewQueue from "@/components/dashboard/ReviewQueue";
@@ -39,8 +40,9 @@ export interface VocabCard {
 export default function DashboardPage() {
   const greeting = getGreeting();
   const { user } = useAuth();
+  const searchParams = useSearchParams();
   const [cards, setCards] = useState<VocabCard[]>([]);
-  const [quota, setQuota] = useState<{ used: number; limit: number } | null>(null);
+  const [quota, setQuota] = useState<{ used: number; limit: number; tier?: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -64,8 +66,37 @@ export default function DashboardPage() {
     fetchCards();
   }, [user?.dbUserId]);
 
+  // Handle ?subscribe=tier redirect from pricing page
+  useEffect(() => {
+    const tier = searchParams.get("subscribe");
+    if (!tier || !user?.dbUserId) return;
+
+    async function startCheckout() {
+      try {
+        const res = await fetch("/api/stripe/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: user!.dbUserId, tier }),
+        });
+        const data = await res.json();
+        if (data.url) {
+          window.location.href = data.url;
+        }
+      } catch {
+        // Checkout failed, just stay on dashboard
+      }
+    }
+
+    startCheckout();
+  }, [searchParams, user?.dbUserId]);
+
   const totalWords = cards.length;
-  const dueForReview = cards.filter((c) => c.review_status < 2).length;
+  const now = Date.now();
+  const dueForReview = cards.filter((c) => {
+    if (c.review_status === 0) return true;
+    if (c.next_review_at && new Date(c.next_review_at).getTime() <= now) return true;
+    return false;
+  }).length;
   const displayName = user?.displayName || "學習者";
 
   return (
@@ -102,8 +133,13 @@ export default function DashboardPage() {
             </p>
             {quota && !loading && (
               <p className="text-earth-light/80 text-sm mt-1">
-                📸 本月截圖額度：{quota.used}/{quota.limit}
-                {quota.used >= quota.limit && (
+                📸 本月截圖額度：{quota.used}/{quota.limit === Infinity ? "∞" : quota.limit}
+                {quota.tier && quota.tier !== "free" && (
+                  <span className="text-seed font-bold ml-2">
+                    {quota.tier === "sprout" ? "🌱 嫩芽" : "🌸 綻放"}
+                  </span>
+                )}
+                {quota.limit !== Infinity && quota.used >= quota.limit && (
                   <Link href="/pricing" className="text-bloom font-bold ml-2 hover:underline">
                     升級方案 →
                   </Link>

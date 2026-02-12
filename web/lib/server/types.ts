@@ -24,6 +24,8 @@ export interface DbUser {
   line_user_id: string;
   display_name: string | null;
   is_premium: boolean;
+  stripe_customer_id: string | null;
+  subscription_tier: string; // 'free' | 'sprout' | 'bloom'
   created_at: string;
 }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { pricingPlans } from "@/lib/constants";
 import Nav from "@/components/ui/Nav";
@@ -10,10 +11,16 @@ import { SparklesDoodle } from "@/components/ui/DoodleSVG";
 function PricingCard({
   plan,
   index,
+  onSubscribe,
+  subscribing,
 }: {
   plan: (typeof pricingPlans)[number];
   index: number;
+  onSubscribe: (tier: string) => void;
+  subscribing: string | null;
 }) {
+  const isLoading = subscribing === plan.tierId;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 30 }}
@@ -71,18 +78,55 @@ function PricingCard({
       </ul>
 
       {/* CTA */}
-      <Button
-        variant={plan.highlighted ? "primary" : "outline"}
-        fullWidth
-        size="lg"
-      >
-        {plan.cta}
-      </Button>
+      {plan.tierId === "free" ? (
+        <Button
+          variant="outline"
+          fullWidth
+          size="lg"
+          onClick={() => window.location.href = "/dashboard"}
+        >
+          {plan.cta}
+        </Button>
+      ) : (
+        <Button
+          variant={plan.highlighted ? "primary" : "outline"}
+          fullWidth
+          size="lg"
+          onClick={() => onSubscribe(plan.tierId)}
+          disabled={isLoading}
+        >
+          {isLoading ? "處理中..." : plan.cta}
+        </Button>
+      )}
     </motion.div>
   );
 }
 
 export default function PricingPage() {
+  const [subscribing, setSubscribing] = useState<string | null>(null);
+
+  async function handleSubscribe(tier: string) {
+    setSubscribing(tier);
+
+    try {
+      // First check if user is logged in by trying to get their info
+      // If they're not logged in, redirect to dashboard (which shows login)
+      const meRes = await fetch("/api/auth/me?lineUserId=check");
+      if (!meRes.ok) {
+        window.location.href = "/dashboard";
+        return;
+      }
+
+      // Try to get userId from localStorage/LIFF context
+      // Since pricing page might not have AuthProvider, we redirect through dashboard
+      window.location.href = `/dashboard?subscribe=${tier}`;
+    } catch {
+      window.location.href = `/dashboard?subscribe=${tier}`;
+    } finally {
+      setSubscribing(null);
+    }
+  }
+
   return (
     <>
       <Nav />
@@ -109,7 +153,13 @@ export default function PricingPage() {
         <div className="max-w-5xl mx-auto px-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-4 items-start">
             {pricingPlans.map((plan, i) => (
-              <PricingCard key={plan.nameEn} plan={plan} index={i} />
+              <PricingCard
+                key={plan.nameEn}
+                plan={plan}
+                index={i}
+                onSubscribe={handleSubscribe}
+                subscribing={subscribing}
+              />
             ))}
           </div>
         </div>
