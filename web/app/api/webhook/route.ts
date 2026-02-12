@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
 
   // Verify signature for actual events
   if (!verifySignature(body, signature)) {
-    console.log("[webhook] Signature verification FAILED");
+    console.log("[webhook] Signature FAILED — secret length:", (process.env.LINE_CHANNEL_SECRET || "").length, "sig:", signature.slice(0, 8) + "...");
     return NextResponse.json({ error: "Invalid signature" }, { status: 403 });
   }
   console.log("[webhook] Signature verified OK");
