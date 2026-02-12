@@ -161,7 +161,7 @@ export default function Hero() {
             transition={{ delay: 0.35 }}
             className="text-lg text-earth-light max-w-lg leading-relaxed"
           >
-            Duolingo 截圖 → AI 解析 → 精美單字卡，
+            手機截圖 → 轉傳到LINE帳號 → AI 解析 → 精美單字卡，
             <span className="font-semibold text-earth">3 秒搞定</span>
           </motion.p>
 

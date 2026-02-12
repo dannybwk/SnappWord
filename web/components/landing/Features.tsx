@@ -138,7 +138,7 @@ export default function Features() {
 
           {/* Cloud storage */}
           <FeatureCard
-            title="永久雲端存儲"
+            title="雲端存儲"
             description="所有單字卡安全存在雲端，換手機也不怕遺失"
             icon="☁️"
             delay={0.15}
