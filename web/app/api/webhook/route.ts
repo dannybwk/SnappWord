@@ -201,12 +201,15 @@ async function handlePostback(event: LineEvent): Promise<void> {
   const cardId = params.get("card_id") || "";
 
   if (action === "save" && cardId) {
+    await replyText(
+      replyToken,
+      "📖 已存入單字筆記！\n到 snappword.com 查看你的完整筆記本 ✨"
+    );
+  } else if (action === "review" && cardId) {
     await updateCardStatus(cardId, 1); // 1 = Learning
     await replyText(
       replyToken,
-      "✅ 已存入你的單字本！明天早上會推播複習提醒喔 📚"
+      "🔁 已加入複習清單！之後會推播提醒你複習 📚"
     );
-  } else if (action === "skip" && cardId) {
-    await replyText(replyToken, "⏭ 已跳過");
   }
 }

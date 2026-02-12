@@ -136,7 +136,7 @@ function buildVocabCard(
           type: "button",
           action: {
             type: "postback",
-            label: "📖 記住了",
+            label: "📖 存下來",
             data: `action=save&card_id=${cardId}`,
           },
           style: "primary",
@@ -147,8 +147,8 @@ function buildVocabCard(
           type: "button",
           action: {
             type: "postback",
-            label: "⏭ 跳過",
-            data: `action=skip&card_id=${cardId}`,
+            label: "🔁 待複習",
+            data: `action=review&card_id=${cardId}`,
           },
           style: "secondary",
           height: "sm",
