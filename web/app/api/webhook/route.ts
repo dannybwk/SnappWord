@@ -127,6 +127,13 @@ async function processScreenshot(
             "⏳ 請稍等幾秒再傳送下一張截圖喔！"
           ),
         ]);
+      } else if (quota.reason === "daily_quota") {
+        await pushMessage(lineUserId, [
+          buildErrorMessage(
+            "📊 今天的截圖解析量已達上限（500 張）\n" +
+            "明天就會自動重置，請明天再繼續！"
+          ),
+        ]);
       } else if (quota.reason === "monthly_quota") {
         await pushMessage(lineUserId, [
           buildErrorMessage(

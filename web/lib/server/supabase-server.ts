@@ -131,6 +131,13 @@ const MIN_INTERVAL_SECONDS: Record<string, number> = {
   bloom: 3,
 };
 
+/** Daily caps (anti-abuse for unlimited tiers). */
+const DAILY_LIMITS: Record<string, number> = {
+  free: Infinity,   // already capped by monthly quota
+  sprout: Infinity,  // already capped by monthly quota
+  bloom: 500,
+};
+
 function getUserTier(user: DbUser): string {
   // Check subscription_tier from Stripe integration
   if (user.subscription_tier && user.subscription_tier !== "free") {
@@ -180,7 +187,7 @@ export async function getUserById(userId: string): Promise<DbUser | null> {
 
 export interface QuotaCheck {
   allowed: boolean;
-  reason?: "rate_limit" | "monthly_quota";
+  reason?: "rate_limit" | "monthly_quota" | "daily_quota";
   tier: string;
   monthlyUsed: number;
   monthlyLimit: number;
@@ -216,7 +223,31 @@ export async function checkQuota(user: DbUser): Promise<QuotaCheck> {
     }
   }
 
-  // 2. Monthly quota: count image_received events this month
+  // 2. Daily quota: anti-abuse cap for unlimited tiers
+  const dailyLimit = DAILY_LIMITS[tier] ?? Infinity;
+  if (dailyLimit !== Infinity) {
+    const dayStart = new Date();
+    dayStart.setHours(0, 0, 0, 0);
+
+    const { count: dailyCount } = await sb
+      .from("api_logs")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("event_type", "image_received")
+      .gte("created_at", dayStart.toISOString());
+
+    if ((dailyCount ?? 0) >= dailyLimit) {
+      return {
+        allowed: false,
+        reason: "daily_quota",
+        tier,
+        monthlyUsed: 0,
+        monthlyLimit,
+      };
+    }
+  }
+
+  // 3. Monthly quota: count image_received events this month
   if (monthlyLimit !== Infinity) {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
