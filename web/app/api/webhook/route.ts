@@ -27,6 +27,7 @@ import {
 } from "@/lib/server/gemini-client";
 import {
   getOrCreateUser,
+  checkQuota,
   uploadImage,
   saveVocabCards,
   updateCardStatus,
@@ -116,6 +117,27 @@ async function processScreenshot(
   try {
     const user = await getOrCreateUser(lineUserId);
     userId = user.id;
+
+    // Check rate limit & monthly quota before processing
+    const quota = await checkQuota(user);
+    if (!quota.allowed) {
+      if (quota.reason === "rate_limit") {
+        await pushMessage(lineUserId, [
+          buildErrorMessage(
+            "⏳ 請稍等幾秒再傳送下一張截圖喔！"
+          ),
+        ]);
+      } else if (quota.reason === "monthly_quota") {
+        await pushMessage(lineUserId, [
+          buildErrorMessage(
+            `📊 本月已使用 ${quota.monthlyUsed}/${quota.monthlyLimit} 張截圖額度\n` +
+            "額度已用完，下個月會自動重置！\n\n" +
+            "💎 升級方案可獲得更多額度：\nsnappword.com/pricing"
+          ),
+        ]);
+      }
+      return;
+    }
 
     // Download image from LINE
     const imageBytes = await getMessageContent(messageId);

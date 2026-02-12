@@ -40,6 +40,7 @@ export default function DashboardPage() {
   const greeting = getGreeting();
   const { user } = useAuth();
   const [cards, setCards] = useState<VocabCard[]>([]);
+  const [quota, setQuota] = useState<{ used: number; limit: number } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -51,6 +52,7 @@ export default function DashboardPage() {
         if (res.ok) {
           const data = await res.json();
           setCards(data.cards || []);
+          if (data.quota) setQuota(data.quota);
         }
       } catch {
         // fallback to empty
@@ -98,6 +100,16 @@ export default function DashboardPage() {
                 </>
               )}
             </p>
+            {quota && !loading && (
+              <p className="text-earth-light/80 text-sm mt-1">
+                📸 本月截圖額度：{quota.used}/{quota.limit}
+                {quota.used >= quota.limit && (
+                  <Link href="/pricing" className="text-bloom font-bold ml-2 hover:underline">
+                    升級方案 →
+                  </Link>
+                )}
+              </p>
+            )}
           </div>
           <Link href="/quiz">
             <Button size="md" icon={<span>🎯</span>}>

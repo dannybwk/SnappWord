@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getMonthlyUsage } from "@/lib/server/supabase-server";
 
 function getClient() {
   return createClient(
@@ -37,15 +38,21 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Missing userId or cardId" }, { status: 400 });
   }
 
-  const { data, error } = await sb
-    .from("vocab_cards")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false });
+  const [cardsResult, usage] = await Promise.all([
+    sb
+      .from("vocab_cards")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false }),
+    getMonthlyUsage(userId),
+  ]);
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  if (cardsResult.error) {
+    return NextResponse.json({ error: cardsResult.error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ cards: data || [] });
+  return NextResponse.json({
+    cards: cardsResult.data || [],
+    quota: { used: usage.used, limit: 30 }, // TODO: adjust limit per tier after Stripe
+  });
 }
