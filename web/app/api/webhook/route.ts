@@ -26,44 +26,10 @@ import {
 import { buildVocabCarousel, buildErrorMessage } from "@/lib/server/flex-messages";
 import type { LineEvent, ParsedWord } from "@/lib/server/types";
 
-// Allow up to 60s for Gemini processing (requires Vercel Pro for >10s)
+// Allow up to 60s for Gemini processing
 export const maxDuration = 60;
 
-/** GET — Health check: env diagnostics + LINE API connectivity test. */
-export async function GET() {
-  const hasSecret = !!process.env.LINE_CHANNEL_SECRET;
-  const hasToken = !!process.env.LINE_CHANNEL_ACCESS_TOKEN;
-  const hasGemini = !!process.env.GEMINI_API_KEY;
-  const hasSupabaseUrl = !!process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const hasSupabaseKey = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  // Test LINE API connectivity
-  let lineApi = "UNTESTED";
-  try {
-    const token = (process.env.LINE_CHANNEL_ACCESS_TOKEN || "").trim();
-    const resp = await fetch("https://api.line.me/v2/bot/info", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    lineApi = resp.ok ? `OK (${resp.status})` : `FAIL (${resp.status})`;
-  } catch (e) {
-    lineApi = `ERROR: ${String(e)}`;
-  }
-
-  return NextResponse.json({
-    status: "ok",
-    env: {
-      LINE_CHANNEL_SECRET: hasSecret ? `SET (${(process.env.LINE_CHANNEL_SECRET || "").trim().length} chars)` : "MISSING",
-      LINE_CHANNEL_ACCESS_TOKEN: hasToken ? `SET (${(process.env.LINE_CHANNEL_ACCESS_TOKEN || "").trim().length} chars)` : "MISSING",
-      GEMINI_API_KEY: hasGemini ? "SET" : "MISSING",
-      NEXT_PUBLIC_SUPABASE_URL: hasSupabaseUrl ? "SET" : "MISSING",
-      SUPABASE_SERVICE_ROLE_KEY: hasSupabaseKey ? "SET" : "MISSING",
-    },
-    lineApi,
-  });
-}
-
 export async function POST(request: NextRequest) {
-  console.log("[webhook] POST received");
   const body = await request.text();
   const signature = request.headers.get("x-line-signature") || "";
 
@@ -72,12 +38,10 @@ export async function POST(request: NextRequest) {
   try {
     payload = JSON.parse(body);
   } catch {
-    console.log("[webhook] Invalid JSON");
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
   const events: LineEvent[] = payload.events || [];
-  console.log(`[webhook] events: ${events.length}, types: ${events.map(e => e.type).join(",")}`);
 
   // LINE webhook verify: empty events → return 200 immediately
   if (events.length === 0) {
@@ -138,25 +102,22 @@ async function processScreenshot(
   lineUserId: string,
   messageId: string
 ): Promise<void> {
-  const user = await getOrCreateUser(lineUserId);
-  const userId = user.id;
+  let userId: string | null = null;
 
   try {
+    const user = await getOrCreateUser(lineUserId);
+    userId = user.id;
+
     // Download image from LINE
-    console.log("[process] Downloading image:", messageId);
     const imageBytes = await getMessageContent(messageId);
-    console.log("[process] Image downloaded, size:", imageBytes.length);
     await logEvent(userId, "image_received", {
       payload: { message_id: messageId },
     });
 
     // Upload to Supabase Storage
-    console.log("[process] Uploading to Supabase Storage...");
     const imageUrl = await uploadImage(imageBytes, userId);
-    console.log("[process] Uploaded:", imageUrl);
 
     // AI analysis
-    console.log("[process] Calling Gemini...");
     const [parseResult, metadata] = await analyzeScreenshot(imageBytes);
     await logEvent(userId, "gemini_call", {
       latencyMs: metadata.latencyMs,
@@ -190,16 +151,17 @@ async function processScreenshot(
     const flexMsg = buildVocabCarousel(wordCardPairs, parseResult.source_app);
     await pushMessage(lineUserId, [flexMsg]);
   } catch (err) {
-    const errMsg = err instanceof Error ? err.message : String(err);
-    console.error("[process] FAILED:", errMsg);
+    console.error("processScreenshot error:", err);
     try {
-      await logEvent(userId, "parse_fail", {
-        payload: { error: errMsg },
-      });
+      if (userId) {
+        await logEvent(userId, "parse_fail", {
+          payload: { error: err instanceof Error ? err.message : String(err) },
+        });
+      }
     } catch { /* ignore logging failure */ }
     await pushMessage(lineUserId, [
       buildErrorMessage(
-        `處理截圖時發生錯誤 😅\n${errMsg}\n\n請稍後重試，或換一張更清晰的截圖。`
+        "處理截圖時發生錯誤 😅\n請稍後重試，或換一張更清晰的截圖。"
       ),
     ]);
   }
