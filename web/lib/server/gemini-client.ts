@@ -62,7 +62,7 @@ export async function analyzeScreenshot(
 ): Promise<[GeminiParseResult, { latencyMs: number; tokenCount: number | null }]> {
   const client = getClient();
   const model = client.getGenerativeModel({
-    model: "gemini-1.5-flash",
+    model: "gemini-2.0-flash",
     systemInstruction: SYSTEM_PROMPT,
     generationConfig: {
       responseMimeType: "application/json",
