@@ -7,11 +7,11 @@ import { createHmac, timingSafeEqual } from "crypto";
 const LINE_API_BASE = "https://api.line.me/v2/bot";
 
 function getSecret(): string {
-  return process.env.LINE_CHANNEL_SECRET || "";
+  return (process.env.LINE_CHANNEL_SECRET || "").trim();
 }
 
 function getToken(): string {
-  return process.env.LINE_CHANNEL_ACCESS_TOKEN || "";
+  return (process.env.LINE_CHANNEL_ACCESS_TOKEN || "").trim();
 }
 
 function headers(): Record<string, string> {

@@ -73,13 +73,7 @@ export async function POST(request: NextRequest) {
 
   // Verify signature for actual events
   if (!verifySignature(body, signature)) {
-    // Temporary debug: return info to diagnose secret mismatch
-    const secretLen = (process.env.LINE_CHANNEL_SECRET || "").length;
-    const secretPrefix = (process.env.LINE_CHANNEL_SECRET || "").slice(0, 4);
-    return NextResponse.json({
-      error: "Invalid signature",
-      debug: { secretLen, secretPrefix, sigReceived: signature.slice(0, 12) },
-    }, { status: 403 });
+    return NextResponse.json({ error: "Invalid signature" }, { status: 403 });
   }
 
   // Return 200 immediately (LINE expects fast response),
