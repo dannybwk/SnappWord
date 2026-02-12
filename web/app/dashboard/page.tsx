@@ -17,14 +17,23 @@ function getGreeting(): string {
   return "晚安";
 }
 
-interface VocabCard {
+export interface VocabCard {
   id: string;
+  user_id: string;
   word: string;
   translation: string;
   pronunciation: string;
+  original_sentence: string;
+  context_trans: string;
+  ai_example: string;
+  image_url: string;
   source_app: string;
-  review_status: number;
+  target_lang: string;
+  tags: string[];
+  review_status: number; // 0=New, 1=Learning, 2=Mastered
+  next_review_at: string;
   created_at: string;
+  updated_at: string;
 }
 
 export default function DashboardPage() {
@@ -54,7 +63,7 @@ export default function DashboardPage() {
   }, [user?.dbUserId]);
 
   const totalWords = cards.length;
-  const dueForReview = cards.filter((c) => c.review_status === 1).length;
+  const dueForReview = cards.filter((c) => c.review_status < 2).length;
   const displayName = user?.displayName || "學習者";
 
   return (
@@ -73,6 +82,8 @@ export default function DashboardPage() {
             <p className="text-earth-light mt-1">
               {loading ? (
                 "載入中..."
+              ) : totalWords === 0 ? (
+                "還沒有單字，快去 LINE 傳截圖吧！"
               ) : (
                 <>
                   你已經收集了{" "}
@@ -101,7 +112,7 @@ export default function DashboardPage() {
         <h2 className="font-heading font-bold text-lg text-earth mb-3 flex items-center gap-2">
           <span className="text-bloom">🔥</span> 待複習
         </h2>
-        <ReviewQueue />
+        <ReviewQueue cards={cards} loading={loading} />
       </section>
 
       {/* Stats */}
@@ -110,9 +121,9 @@ export default function DashboardPage() {
           <span className="text-sky">📊</span> 學習統計
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <WeeklyChart />
-          <LanguagePieChart />
-          <MasteryRing />
+          <WeeklyChart cards={cards} />
+          <LanguagePieChart cards={cards} />
+          <MasteryRing cards={cards} />
         </div>
       </section>
 
@@ -121,7 +132,7 @@ export default function DashboardPage() {
         <h2 className="font-heading font-bold text-lg text-earth mb-3 flex items-center gap-2">
           <span className="text-seed">📚</span> 我的單字
         </h2>
-        <VocabTable />
+        <VocabTable cards={cards} loading={loading} />
       </section>
 
       {/* Export */}
@@ -129,7 +140,7 @@ export default function DashboardPage() {
         <h2 className="font-heading font-bold text-lg text-earth mb-3 flex items-center gap-2">
           <span className="text-sun">📦</span> 匯出
         </h2>
-        <ExportPanel />
+        <ExportPanel cards={cards} />
       </section>
     </div>
   );

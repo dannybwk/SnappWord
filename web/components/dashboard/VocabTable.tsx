@@ -2,31 +2,63 @@
 
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { recentVocab } from "@/lib/constants";
+import type { VocabCard } from "@/app/dashboard/page";
 
-type VocabStatus = "all" | "new" | "learning" | "mastered";
+type StatusFilter = "all" | 0 | 1 | 2;
 
-const statusConfig: Record<string, { label: string; color: string }> = {
-  new: { label: "新字", color: "bg-sky-light text-sky" },
-  learning: { label: "學習中", color: "bg-sun-light text-sun" },
-  mastered: { label: "已掌握", color: "bg-sprout-light text-seed" },
+const statusConfig: Record<number, { label: string; color: string }> = {
+  0: { label: "新字", color: "bg-sky-light text-sky" },
+  1: { label: "學習中", color: "bg-sun-light text-sun" },
+  2: { label: "已掌握", color: "bg-sprout-light text-seed" },
 };
 
-export default function VocabTable() {
+const langMap: Record<string, string> = {
+  en: "英語",
+  ja: "日語",
+  ko: "韓語",
+  es: "西班牙語",
+  fr: "法語",
+  de: "德語",
+  "zh-TW": "中文",
+};
+
+function getLangName(code: string): string {
+  return langMap[code] || code;
+}
+
+function formatDate(dateStr: string): string {
+  const d = new Date(dateStr);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+interface Props {
+  cards: VocabCard[];
+  loading: boolean;
+}
+
+export default function VocabTable({ cards, loading }: Props) {
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<VocabStatus>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
-    return recentVocab.filter((v) => {
+    return cards.filter((v) => {
       const matchSearch =
         !search ||
         v.word.toLowerCase().includes(search.toLowerCase()) ||
         v.translation.includes(search);
-      const matchStatus = statusFilter === "all" || v.status === statusFilter;
+      const matchStatus = statusFilter === "all" || v.review_status === statusFilter;
       return matchSearch && matchStatus;
     });
-  }, [search, statusFilter]);
+  }, [cards, search, statusFilter]);
+
+  if (loading) {
+    return (
+      <div className="bg-white rounded-2xl border border-mist/60 p-8 text-center text-earth-light text-sm">
+        載入中...
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white rounded-2xl border border-mist/60 p-4 sm:p-5">
@@ -46,9 +78,9 @@ export default function VocabTable() {
         </div>
 
         <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
-          {(["all", "new", "learning", "mastered"] as VocabStatus[]).map((s) => (
+          {(["all", 0, 1, 2] as StatusFilter[]).map((s) => (
             <button
-              key={s}
+              key={String(s)}
               onClick={() => setStatusFilter(s)}
               className={`
                 flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-all
@@ -67,7 +99,7 @@ export default function VocabTable() {
       {/* Mobile: Card list */}
       <div className="sm:hidden space-y-2">
         <AnimatePresence>
-          {filtered.map((vocab, i) => (
+          {filtered.map((vocab) => (
             <motion.div
               key={vocab.id}
               layout
@@ -87,9 +119,9 @@ export default function VocabTable() {
                   </div>
                 </div>
                 <span
-                  className={`flex-shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold ${statusConfig[vocab.status].color}`}
+                  className={`flex-shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold ${statusConfig[vocab.review_status]?.color || ""}`}
                 >
-                  {statusConfig[vocab.status].label}
+                  {statusConfig[vocab.review_status]?.label || ""}
                 </span>
               </div>
 
@@ -101,14 +133,18 @@ export default function VocabTable() {
                     exit={{ height: 0, opacity: 0 }}
                     className="overflow-hidden"
                   >
-                    <div className="mt-2 pt-2 border-t border-mist/50 flex items-center gap-3 text-xs text-earth-light">
-                      <span>{vocab.language}</span>
-                      <span>{vocab.source}</span>
-                      <span className={`font-bold ${
-                        vocab.mastery < 30 ? "text-bloom" : vocab.mastery < 60 ? "text-sun" : "text-seed"
-                      }`}>
-                        掌握 {vocab.mastery}%
-                      </span>
+                    <div className="mt-2 pt-2 border-t border-mist/50 space-y-1 text-xs text-earth-light">
+                      <div className="flex items-center gap-3">
+                        <span>{getLangName(vocab.target_lang)}</span>
+                        <span>{vocab.source_app}</span>
+                        <span>{formatDate(vocab.created_at)}</span>
+                      </div>
+                      {vocab.pronunciation && (
+                        <div className="text-earth-light/80">{vocab.pronunciation}</div>
+                      )}
+                      {vocab.ai_example && (
+                        <div className="italic text-earth-light/80">{vocab.ai_example}</div>
+                      )}
                     </div>
                   </motion.div>
                 )}
@@ -128,6 +164,7 @@ export default function VocabTable() {
               <th className="text-left py-2 px-2 text-earth-light font-medium text-xs">語言</th>
               <th className="text-left py-2 px-2 text-earth-light font-medium text-xs">來源</th>
               <th className="text-left py-2 px-2 text-earth-light font-medium text-xs">狀態</th>
+              <th className="text-left py-2 px-2 text-earth-light font-medium text-xs">日期</th>
             </tr>
           </thead>
           <tbody>
@@ -145,14 +182,17 @@ export default function VocabTable() {
                     <span className="font-heading font-bold text-earth">{vocab.word}</span>
                   </td>
                   <td className="py-2.5 px-2 text-earth-light">{vocab.translation}</td>
-                  <td className="py-2.5 px-2 text-earth-light">{vocab.language}</td>
-                  <td className="py-2.5 px-2 text-earth-light">{vocab.source}</td>
+                  <td className="py-2.5 px-2 text-earth-light">{getLangName(vocab.target_lang)}</td>
+                  <td className="py-2.5 px-2 text-earth-light">{vocab.source_app}</td>
                   <td className="py-2.5 px-2">
                     <span
-                      className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${statusConfig[vocab.status].color}`}
+                      className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${statusConfig[vocab.review_status]?.color || ""}`}
                     >
-                      {statusConfig[vocab.status].label}
+                      {statusConfig[vocab.review_status]?.label || ""}
                     </span>
+                  </td>
+                  <td className="py-2.5 px-2 text-earth-light text-xs">
+                    {formatDate(vocab.created_at)}
                   </td>
                 </motion.tr>
               ))}
@@ -163,7 +203,7 @@ export default function VocabTable() {
 
       {filtered.length === 0 && (
         <div className="text-center py-8 text-earth-light text-sm">
-          找不到符合條件的單字
+          {cards.length === 0 ? "還沒有單字，快去 LINE 傳截圖吧！" : "找不到符合條件的單字"}
         </div>
       )}
     </div>

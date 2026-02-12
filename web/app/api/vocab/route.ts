@@ -1,6 +1,6 @@
 /**
- * GET /api/vocab?userId=UUID
- * Returns vocab cards for a given DB user ID.
+ * GET /api/vocab?userId=UUID        → all cards for user
+ * GET /api/vocab?cardId=UUID        → single card by ID
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -15,12 +15,27 @@ function getClient() {
 
 export async function GET(request: NextRequest) {
   const userId = request.nextUrl.searchParams.get("userId");
+  const cardId = request.nextUrl.searchParams.get("cardId");
+  const sb = getClient();
 
-  if (!userId) {
-    return NextResponse.json({ error: "Missing userId" }, { status: 400 });
+  // Single card lookup
+  if (cardId) {
+    const { data, error } = await sb
+      .from("vocab_cards")
+      .select("*")
+      .eq("id", cardId)
+      .single();
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 404 });
+    }
+    return NextResponse.json({ card: data });
   }
 
-  const sb = getClient();
+  // All cards for user
+  if (!userId) {
+    return NextResponse.json({ error: "Missing userId or cardId" }, { status: 400 });
+  }
 
   const { data, error } = await sb
     .from("vocab_cards")

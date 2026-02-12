@@ -1,10 +1,27 @@
 "use client";
 
-import { use } from "react";
+import { use, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { recentVocab, demoCards } from "@/lib/constants";
+import { useAuth } from "@/components/auth/AuthProvider";
+import type { VocabCard } from "@/app/dashboard/page";
 import Button from "@/components/ui/Button";
 import Link from "next/link";
+
+const statusConfig: Record<number, { label: string; color: string }> = {
+  0: { label: "新字", color: "bg-sky-light text-sky" },
+  1: { label: "學習中", color: "bg-sun-light text-sun" },
+  2: { label: "已掌握", color: "bg-sprout-light text-seed" },
+};
+
+const langMap: Record<string, string> = {
+  en: "英語",
+  ja: "日語",
+  ko: "韓語",
+  es: "西班牙語",
+  fr: "法語",
+  de: "德語",
+  "zh-TW": "中文",
+};
 
 export default function VocabDetailPage({
   params,
@@ -12,10 +29,36 @@ export default function VocabDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const vocab = recentVocab.find((v) => v.id === id);
-  const demoCard = demoCards.find((_, i) => String(i + 1) === id);
+  const { user } = useAuth();
+  const [card, setCard] = useState<VocabCard | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  if (!vocab) {
+  useEffect(() => {
+    async function fetchCard() {
+      try {
+        const res = await fetch(`/api/vocab?cardId=${id}`);
+        if (res.ok) {
+          const data = await res.json();
+          setCard(data.card || null);
+        }
+      } catch {
+        // not found
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchCard();
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="max-w-2xl mx-auto text-center py-20 text-earth-light">
+        載入中...
+      </div>
+    );
+  }
+
+  if (!card) {
     return (
       <div className="max-w-2xl mx-auto text-center py-20">
         <span className="text-5xl block mb-4">🔍</span>
@@ -28,11 +71,9 @@ export default function VocabDetailPage({
     );
   }
 
-  const statusConfig: Record<string, { label: string; color: string }> = {
-    new: { label: "新字", color: "bg-sky-light text-sky" },
-    learning: { label: "學習中", color: "bg-sun-light text-sun" },
-    mastered: { label: "已掌握", color: "bg-sprout-light text-seed" },
-  };
+  const status = statusConfig[card.review_status] || statusConfig[0];
+  const lang = langMap[card.target_lang] || card.target_lang;
+  const createdDate = card.created_at ? new Date(card.created_at).toLocaleDateString("zh-TW") : "";
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -52,11 +93,9 @@ export default function VocabDetailPage({
       >
         {/* Header */}
         <div className="bg-gradient-to-r from-seed to-seed-dark px-6 py-4 flex items-center justify-between">
-          <span className="text-white/80 text-sm font-medium">{vocab.language}</span>
-          <span
-            className={`px-3 py-1 rounded-full text-xs font-bold ${statusConfig[vocab.status].color}`}
-          >
-            {statusConfig[vocab.status].label}
+          <span className="text-white/80 text-sm font-medium">{lang}</span>
+          <span className={`px-3 py-1 rounded-full text-xs font-bold ${status.color}`}>
+            {status.label}
           </span>
         </div>
 
@@ -64,61 +103,70 @@ export default function VocabDetailPage({
         <div className="p-6 md:p-8 space-y-6">
           {/* Word */}
           <div>
-            <h1 className="font-heading font-extrabold text-4xl text-earth">{vocab.word}</h1>
-            <p className="text-lg text-seed font-bold mt-2">{vocab.translation}</p>
-          </div>
-
-          {/* Mastery */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-xs text-earth-light">記憶強度</span>
-              <span className="text-xs font-bold text-earth">{vocab.mastery}%</span>
-            </div>
-            <div className="w-full h-2.5 bg-mist rounded-full overflow-hidden">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${vocab.mastery}%` }}
-                transition={{ duration: 0.8, ease: "easeOut" }}
-                className={`h-full rounded-full ${
-                  vocab.mastery < 30
-                    ? "bg-bloom"
-                    : vocab.mastery < 60
-                      ? "bg-sun"
-                      : "bg-seed"
-                }`}
-              />
-            </div>
+            <h1 className="font-heading font-extrabold text-4xl text-earth">{card.word}</h1>
+            {card.pronunciation && (
+              <p className="text-sm text-earth-light mt-1">{card.pronunciation}</p>
+            )}
+            <p className="text-lg text-seed font-bold mt-2">{card.translation}</p>
           </div>
 
           {/* Details */}
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-cloud rounded-xl p-3">
               <span className="text-xs text-earth-light block mb-1">來源</span>
-              <span className="text-sm font-medium text-earth">{vocab.source}</span>
+              <span className="text-sm font-medium text-earth">{card.source_app}</span>
             </div>
             <div className="bg-cloud rounded-xl p-3">
               <span className="text-xs text-earth-light block mb-1">建立日期</span>
-              <span className="text-sm font-medium text-earth">{vocab.createdAt}</span>
+              <span className="text-sm font-medium text-earth">{createdDate}</span>
             </div>
           </div>
 
-          {/* Example sentence (from demo data if available) */}
-          {demoCard && (
+          {/* Original sentence */}
+          {card.original_sentence && (
+            <div className="bg-cloud rounded-xl p-4">
+              <span className="text-xs text-earth-light font-bold block mb-2">原文句子</span>
+              <p className="text-sm text-earth">{card.original_sentence}</p>
+              {card.context_trans && (
+                <p className="text-xs text-earth-light mt-1">{card.context_trans}</p>
+              )}
+            </div>
+          )}
+
+          {/* AI example */}
+          {card.ai_example && (
             <div className="bg-sprout-light/30 rounded-xl p-4">
-              <span className="text-xs text-seed font-bold block mb-2">例句</span>
-              <p className="text-sm text-earth italic">&ldquo;{demoCard.example}&rdquo;</p>
-              <p className="text-xs text-earth-light mt-1">{demoCard.exampleTranslation}</p>
+              <span className="text-xs text-seed font-bold block mb-2">AI 例句</span>
+              <p className="text-sm text-earth italic">&ldquo;{card.ai_example}&rdquo;</p>
+            </div>
+          )}
+
+          {/* Tags */}
+          {card.tags && card.tags.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {card.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="px-2.5 py-1 rounded-lg bg-sky-light text-sky text-xs font-medium"
+                >
+                  {tag}
+                </span>
+              ))}
             </div>
           )}
 
           {/* Actions */}
           <div className="flex gap-3 pt-2">
-            <Button size="md" icon={<span>🎯</span>}>
-              加入複習
-            </Button>
-            <Button variant="outline" size="md">
-              匯出
-            </Button>
+            <Link href="/quiz">
+              <Button size="md" icon={<span>🎯</span>}>
+                開始複習
+              </Button>
+            </Link>
+            <Link href="/dashboard">
+              <Button variant="outline" size="md">
+                返回列表
+              </Button>
+            </Link>
           </div>
         </div>
       </motion.div>
