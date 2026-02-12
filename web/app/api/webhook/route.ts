@@ -121,13 +121,7 @@ async function processScreenshot(
     // Check rate limit & monthly quota before processing
     const quota = await checkQuota(user);
     if (!quota.allowed) {
-      if (quota.reason === "rate_limit") {
-        await pushMessage(lineUserId, [
-          buildErrorMessage(
-            "⏳ 請稍等幾秒再傳送下一張截圖喔！"
-          ),
-        ]);
-      } else if (quota.reason === "daily_quota") {
+      if (quota.reason === "daily_quota") {
         await pushMessage(lineUserId, [
           buildErrorMessage(
             "📊 今天的截圖解析量已達上限（500 張）\n" +

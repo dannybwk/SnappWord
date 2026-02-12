@@ -124,12 +124,6 @@ const MONTHLY_LIMITS: Record<string, number> = {
   bloom: Infinity,
 };
 
-/** Per-minute cooldown (seconds between screenshots). */
-const MIN_INTERVAL_SECONDS: Record<string, number> = {
-  free: 10,
-  sprout: 5,
-  bloom: 3,
-};
 
 /** Daily caps (anti-abuse for unlimited tiers). */
 const DAILY_LIMITS: Record<string, number> = {
@@ -187,43 +181,19 @@ export async function getUserById(userId: string): Promise<DbUser | null> {
 
 export interface QuotaCheck {
   allowed: boolean;
-  reason?: "rate_limit" | "monthly_quota" | "daily_quota";
+  reason?: "monthly_quota" | "daily_quota";
   tier: string;
   monthlyUsed: number;
   monthlyLimit: number;
 }
 
-/** Check if user can send another screenshot (rate limit + monthly quota). */
+/** Check if user can send another screenshot (daily + monthly quota). */
 export async function checkQuota(user: DbUser): Promise<QuotaCheck> {
   const sb = getClient();
   const tier = getUserTier(user);
   const monthlyLimit = MONTHLY_LIMITS[tier] ?? MONTHLY_LIMITS.free;
-  const cooldownSeconds = MIN_INTERVAL_SECONDS[tier] ?? MIN_INTERVAL_SECONDS.free;
 
-  // 1. Rate limit: check last image_received timestamp
-  const { data: recentLogs } = await sb
-    .from("api_logs")
-    .select("created_at")
-    .eq("user_id", user.id)
-    .eq("event_type", "image_received")
-    .order("created_at", { ascending: false })
-    .limit(1);
-
-  if (recentLogs && recentLogs.length > 0) {
-    const lastTime = new Date(recentLogs[0].created_at).getTime();
-    const elapsed = (Date.now() - lastTime) / 1000;
-    if (elapsed < cooldownSeconds) {
-      return {
-        allowed: false,
-        reason: "rate_limit",
-        tier,
-        monthlyUsed: 0,
-        monthlyLimit,
-      };
-    }
-  }
-
-  // 2. Daily quota: anti-abuse cap for unlimited tiers
+  // 1. Daily quota: anti-abuse cap for unlimited tiers
   const dailyLimit = DAILY_LIMITS[tier] ?? Infinity;
   if (dailyLimit !== Infinity) {
     const dayStart = new Date();
