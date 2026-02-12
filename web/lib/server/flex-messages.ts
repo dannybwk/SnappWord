@@ -5,6 +5,7 @@
 import type { ParsedWord } from "./types";
 
 const BRAND_COLOR = "#06C755";
+const REVIEW_COLOR = "#FF8C00";
 const BRAND_NAME = "SnappWord 截詞";
 
 /** Build a single vocab card bubble. */
@@ -150,7 +151,8 @@ function buildVocabCard(
             label: "🔁 待複習",
             data: `action=review&card_id=${cardId}`,
           },
-          style: "secondary",
+          style: "primary",
+          color: REVIEW_COLOR,
           height: "sm",
         },
       ],
