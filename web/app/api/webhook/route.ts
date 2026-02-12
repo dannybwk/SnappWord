@@ -190,13 +190,16 @@ async function processScreenshot(
     const flexMsg = buildVocabCarousel(wordCardPairs, parseResult.source_app);
     await pushMessage(lineUserId, [flexMsg]);
   } catch (err) {
-    console.error("[process] FAILED at step:", String(err));
-    await logEvent(userId, "parse_fail", {
-      payload: { error: String(err) },
-    });
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error("[process] FAILED:", errMsg);
+    try {
+      await logEvent(userId, "parse_fail", {
+        payload: { error: errMsg },
+      });
+    } catch { /* ignore logging failure */ }
     await pushMessage(lineUserId, [
       buildErrorMessage(
-        "處理截圖時發生錯誤 😅\n請稍後重試，或換一張更清晰的截圖。"
+        `處理截圖時發生錯誤 😅\n${errMsg}\n\n請稍後重試，或換一張更清晰的截圖。`
       ),
     ]);
   }
