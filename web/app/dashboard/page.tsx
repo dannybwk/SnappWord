@@ -100,7 +100,7 @@ export default function DashboardPage() {
   const displayName = user?.displayName || "學習者";
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8">
+    <div className="max-w-5xl mx-auto space-y-6 sm:space-y-8">
       {/* Greeting header */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
@@ -168,8 +168,10 @@ export default function DashboardPage() {
         <h2 className="font-heading font-bold text-lg text-earth mb-3 flex items-center gap-2">
           <span className="text-sky">📊</span> 學習統計
         </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <WeeklyChart cards={cards} />
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+          <div className="col-span-2 lg:col-span-1">
+            <WeeklyChart cards={cards} />
+          </div>
           <LanguagePieChart cards={cards} />
           <MasteryRing cards={cards} />
         </div>

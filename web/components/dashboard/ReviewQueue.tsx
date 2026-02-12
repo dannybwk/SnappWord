@@ -70,40 +70,83 @@ export default function ReviewQueue({ cards, loading }: Props) {
   }
 
   return (
-    <div className="flex gap-3 overflow-x-auto pb-2 -mx-2 px-2 snap-x snap-mandatory">
-      {dueCards.map((card, i) => {
-        const style = statusStyle[card.review_status] || statusStyle[0];
-        return (
-          <motion.div
-            key={card.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.05 }}
-            whileHover={{ y: -4, scale: 1.02 }}
-            className={`
-              flex-shrink-0 w-44 snap-start
-              bg-white rounded-2xl border p-4
-              cursor-pointer transition-shadow
-              hover:shadow-lg hover:shadow-seed/5
-              ${style.bg}
-            `}
-          >
-            <div className="text-xl font-heading font-extrabold text-earth mb-0.5">
-              {card.word}
-            </div>
-            <div className="text-xs text-earth-light mb-2 line-clamp-1">{card.translation}</div>
+    <>
+      {/* Mobile: vertical list */}
+      <div className="sm:hidden space-y-2">
+        {dueCards.slice(0, 8).map((card, i) => {
+          const style = statusStyle[card.review_status] || statusStyle[0];
+          return (
+            <motion.div
+              key={card.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.03 }}
+              className={`
+                flex items-center gap-3
+                bg-white rounded-xl border p-3
+                ${style.bg}
+              `}
+            >
+              <div className="min-w-0 flex-1">
+                <div className="font-heading font-bold text-base text-earth truncate">
+                  {card.word}
+                </div>
+                <div className="text-xs text-earth-light truncate">{card.translation}</div>
+              </div>
+              <div className="flex flex-col items-end shrink-0">
+                <span className={`text-[10px] font-bold ${style.text}`}>
+                  {statusLabel[card.review_status]}
+                </span>
+                <span className="text-[10px] text-earth-light">
+                  {daysAgo(card.created_at)}
+                </span>
+              </div>
+            </motion.div>
+          );
+        })}
+        {dueCards.length > 8 && (
+          <p className="text-center text-xs text-earth-light pt-1">
+            還有 {dueCards.length - 8} 個待複習
+          </p>
+        )}
+      </div>
 
-            <div className="flex items-center justify-between mt-2">
-              <span className="text-[10px] text-earth-light">
-                {daysAgo(card.created_at)}
-              </span>
-              <span className={`text-[10px] font-bold ${style.text}`}>
-                {statusLabel[card.review_status]}
-              </span>
-            </div>
-          </motion.div>
-        );
-      })}
-    </div>
+      {/* Desktop: horizontal scroll */}
+      <div className="hidden sm:flex gap-3 overflow-x-auto pb-2 -mx-2 px-2 snap-x snap-mandatory">
+        {dueCards.map((card, i) => {
+          const style = statusStyle[card.review_status] || statusStyle[0];
+          return (
+            <motion.div
+              key={card.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.05 }}
+              whileHover={{ y: -4, scale: 1.02 }}
+              className={`
+                flex-shrink-0 w-44 snap-start
+                bg-white rounded-2xl border p-4
+                cursor-pointer transition-shadow
+                hover:shadow-lg hover:shadow-seed/5
+                ${style.bg}
+              `}
+            >
+              <div className="text-xl font-heading font-extrabold text-earth mb-0.5">
+                {card.word}
+              </div>
+              <div className="text-xs text-earth-light mb-2 line-clamp-1">{card.translation}</div>
+
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-[10px] text-earth-light">
+                  {daysAgo(card.created_at)}
+                </span>
+                <span className={`text-[10px] font-bold ${style.text}`}>
+                  {statusLabel[card.review_status]}
+                </span>
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+    </>
   );
 }

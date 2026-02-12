@@ -59,14 +59,14 @@ export function WeeklyChart({ cards }: { cards: VocabCard[] }) {
   }, [cards]);
 
   return (
-    <div className="bg-white rounded-2xl border border-mist/60 p-5">
-      <h3 className="font-heading font-bold text-sm text-earth mb-4">本週新增單字</h3>
+    <div className="bg-white rounded-2xl border border-mist/60 p-4 sm:p-5">
+      <h3 className="font-heading font-bold text-sm text-earth mb-3 sm:mb-4">本週新增單字</h3>
       {cards.length === 0 ? (
-        <div className="h-40 flex items-center justify-center text-earth-light text-sm">
+        <div className="h-32 sm:h-40 flex items-center justify-center text-earth-light text-sm">
           尚無資料
         </div>
       ) : (
-        <div className="h-40">
+        <div className="h-32 sm:h-40">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data}>
               <XAxis
@@ -117,23 +117,23 @@ export function LanguagePieChart({ cards }: { cards: VocabCard[] }) {
   }, [cards]);
 
   return (
-    <div className="bg-white rounded-2xl border border-mist/60 p-5">
-      <h3 className="font-heading font-bold text-sm text-earth mb-4">語言分佈</h3>
+    <div className="bg-white rounded-2xl border border-mist/60 p-4 sm:p-5">
+      <h3 className="font-heading font-bold text-sm text-earth mb-3 sm:mb-4">語言分佈</h3>
       {data.length === 0 ? (
-        <div className="h-40 flex items-center justify-center text-earth-light text-sm">
+        <div className="h-28 sm:h-40 flex items-center justify-center text-earth-light text-sm">
           尚無資料
         </div>
       ) : (
         <>
-          <div className="h-40 flex items-center">
+          <div className="h-28 sm:h-40 flex items-center">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={data}
                   cx="50%"
                   cy="50%"
-                  innerRadius={35}
-                  outerRadius={60}
+                  innerRadius={25}
+                  outerRadius={45}
                   paddingAngle={3}
                   dataKey="value"
                 >
@@ -152,10 +152,10 @@ export function LanguagePieChart({ cards }: { cards: VocabCard[] }) {
               </PieChart>
             </ResponsiveContainer>
           </div>
-          <div className="flex flex-wrap gap-2 mt-2">
+          <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-2">
             {data.map((d) => (
-              <span key={d.name} className="flex items-center gap-1.5 text-xs text-earth-light">
-                <span className="w-2.5 h-2.5 rounded-full" style={{ background: d.fill }} />
+              <span key={d.name} className="flex items-center gap-1 text-[10px] sm:text-xs text-earth-light">
+                <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full" style={{ background: d.fill }} />
                 {d.name} ({d.value})
               </span>
             ))}
@@ -179,15 +179,15 @@ export function MasteryRing({ cards }: { cards: VocabCard[] }) {
   const offset = circumference - (percentage / 100) * circumference;
 
   return (
-    <div className="bg-white rounded-2xl border border-mist/60 p-5 flex flex-col items-center">
-      <h3 className="font-heading font-bold text-sm text-earth mb-4 self-start">掌握率</h3>
+    <div className="bg-white rounded-2xl border border-mist/60 p-4 sm:p-5 flex flex-col items-center">
+      <h3 className="font-heading font-bold text-sm text-earth mb-3 sm:mb-4 self-start">掌握率</h3>
       {total === 0 ? (
-        <div className="h-[100px] flex items-center justify-center text-earth-light text-sm">
+        <div className="h-20 sm:h-[100px] flex items-center justify-center text-earth-light text-sm">
           尚無資料
         </div>
       ) : (
         <>
-          <svg width="100" height="100" viewBox="0 0 100 100">
+          <svg className="w-20 h-20 sm:w-[100px] sm:h-[100px]" viewBox="0 0 100 100">
             <circle
               cx="50" cy="50" r="45"
               fill="none" stroke="#DFE6E9" strokeWidth="8"
