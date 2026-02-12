@@ -245,7 +245,7 @@ async function handlePostback(event: LineEvent): Promise<void> {
   if (action === "save" && cardId) {
     await replyText(
       replyToken,
-      "📖 已存入單字筆記！\n到 snappword.com 查看你的完整筆記本 ✨"
+      "📖 已存入單字筆記！\n到 snappword.com/dashboard 查看你的完整筆記本 ✨"
     );
   } else if (action === "review" && cardId) {
     await updateCardStatus(cardId, 1); // 1 = Learning
