@@ -4,6 +4,11 @@
  * Architecture: Async reply pattern
  * 1. Receive image → reply "analyzing..." instantly
  * 2. Process in background → push result via Push Message API
+ *
+ * Error handling:
+ * - GeminiQuotaError → tell user it's a service issue (not their fault)
+ * - GeminiRetryExhaustedError → tell user to try again later
+ * - Other errors → generic friendly error
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -15,7 +20,11 @@ import {
   pushMessage,
   getMessageContent,
 } from "@/lib/server/line-client";
-import { analyzeScreenshot } from "@/lib/server/gemini-client";
+import {
+  analyzeScreenshot,
+  GeminiQuotaError,
+  GeminiRetryExhaustedError,
+} from "@/lib/server/gemini-client";
 import {
   getOrCreateUser,
   uploadImage,
@@ -26,7 +35,7 @@ import {
 import { buildVocabCarousel, buildErrorMessage } from "@/lib/server/flex-messages";
 import type { LineEvent, ParsedWord } from "@/lib/server/types";
 
-// Allow up to 60s for Gemini processing
+// Allow up to 60s for Gemini processing + retries
 export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
@@ -117,12 +126,12 @@ async function processScreenshot(
     // Upload to Supabase Storage
     const imageUrl = await uploadImage(imageBytes, userId);
 
-    // AI analysis
+    // AI analysis (with retry + model fallback)
     const [parseResult, metadata] = await analyzeScreenshot(imageBytes);
     await logEvent(userId, "gemini_call", {
       latencyMs: metadata.latencyMs,
       tokenCount: metadata.tokenCount,
-      payload: { word_count: parseResult.words.length },
+      payload: { word_count: parseResult.words.length, model: metadata.model },
     });
 
     if (parseResult.words.length === 0) {
@@ -141,6 +150,7 @@ async function processScreenshot(
       payload: {
         cards_saved: savedCards.length,
         source_app: parseResult.source_app,
+        model: metadata.model,
       },
     });
 
@@ -152,19 +162,51 @@ async function processScreenshot(
     await pushMessage(lineUserId, [flexMsg]);
   } catch (err) {
     console.error("processScreenshot error:", err);
+
+    // Log the error
     try {
       if (userId) {
         await logEvent(userId, "parse_fail", {
-          payload: { error: err instanceof Error ? err.message : String(err) },
+          payload: {
+            error: err instanceof Error ? err.message : String(err),
+            error_type: err instanceof GeminiQuotaError
+              ? "quota"
+              : err instanceof GeminiRetryExhaustedError
+                ? "retry_exhausted"
+                : "unknown",
+          },
         });
       }
     } catch { /* ignore logging failure */ }
-    await pushMessage(lineUserId, [
-      buildErrorMessage(
-        "處理截圖時發生錯誤 😅\n請稍後重試，或換一張更清晰的截圖。"
-      ),
-    ]);
+
+    // Send user-friendly error based on error type
+    const userMessage = getUserErrorMessage(err);
+    await pushMessage(lineUserId, [buildErrorMessage(userMessage)]);
   }
+}
+
+/** Map error types to user-friendly messages. */
+function getUserErrorMessage(err: unknown): string {
+  if (err instanceof GeminiQuotaError) {
+    return (
+      "⚠️ AI 服務暫時無法使用\n" +
+      "我們正在處理中，請稍後再試。\n" +
+      "造成不便敬請見諒 🙏"
+    );
+  }
+
+  if (err instanceof GeminiRetryExhaustedError) {
+    return (
+      "🔄 AI 伺服器忙碌中\n" +
+      "已嘗試多次但仍無法完成解析。\n" +
+      "請等 1-2 分鐘後重新傳送截圖。"
+    );
+  }
+
+  return (
+    "處理截圖時發生錯誤 😅\n" +
+    "請稍後重試，或換一張更清晰的截圖。"
+  );
 }
 
 async function handleTextCommand(
