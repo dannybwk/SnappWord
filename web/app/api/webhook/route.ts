@@ -29,7 +29,7 @@ import type { LineEvent, ParsedWord } from "@/lib/server/types";
 // Allow up to 60s for Gemini processing (requires Vercel Pro for >10s)
 export const maxDuration = 60;
 
-/** GET — Health check & env diagnostics (no secrets exposed). */
+/** GET — Health check: env diagnostics + LINE API connectivity test. */
 export async function GET() {
   const hasSecret = !!process.env.LINE_CHANNEL_SECRET;
   const hasToken = !!process.env.LINE_CHANNEL_ACCESS_TOKEN;
@@ -37,15 +37,28 @@ export async function GET() {
   const hasSupabaseUrl = !!process.env.NEXT_PUBLIC_SUPABASE_URL;
   const hasSupabaseKey = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+  // Test LINE API connectivity
+  let lineApi = "UNTESTED";
+  try {
+    const token = (process.env.LINE_CHANNEL_ACCESS_TOKEN || "").trim();
+    const resp = await fetch("https://api.line.me/v2/bot/info", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    lineApi = resp.ok ? `OK (${resp.status})` : `FAIL (${resp.status})`;
+  } catch (e) {
+    lineApi = `ERROR: ${String(e)}`;
+  }
+
   return NextResponse.json({
     status: "ok",
     env: {
-      LINE_CHANNEL_SECRET: hasSecret ? "SET" : "MISSING",
-      LINE_CHANNEL_ACCESS_TOKEN: hasToken ? "SET" : "MISSING",
+      LINE_CHANNEL_SECRET: hasSecret ? `SET (${(process.env.LINE_CHANNEL_SECRET || "").trim().length} chars)` : "MISSING",
+      LINE_CHANNEL_ACCESS_TOKEN: hasToken ? `SET (${(process.env.LINE_CHANNEL_ACCESS_TOKEN || "").trim().length} chars)` : "MISSING",
       GEMINI_API_KEY: hasGemini ? "SET" : "MISSING",
       NEXT_PUBLIC_SUPABASE_URL: hasSupabaseUrl ? "SET" : "MISSING",
       SUPABASE_SERVICE_ROLE_KEY: hasSupabaseKey ? "SET" : "MISSING",
     },
+    lineApi,
   });
 }
 
