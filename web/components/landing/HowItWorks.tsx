@@ -13,6 +13,14 @@ const steps = [
     ringColor: "ring-sky/30",
   },
   {
+    icon: "💬",
+    title: "傳送到 LINE",
+    description: "傳給 SnappWord 截詞",
+    detail: "把截圖傳送到 SnappWord 截詞的官方 LINE 帳號，就這麼簡單",
+    color: "bg-sprout-light text-seed",
+    ringColor: "ring-seed/30",
+  },
+  {
     icon: "🤖",
     title: "AI 解析",
     description: "3 秒即時解析",
@@ -23,10 +31,10 @@ const steps = [
   {
     icon: "📖",
     title: "單字卡",
-    description: "永久保存複習",
-    detail: "精美 Flex Message 卡片推送到 LINE，一鍵收藏、隨時複習",
-    color: "bg-sprout-light text-seed",
-    ringColor: "ring-seed/30",
+    description: "收到精美卡片",
+    detail: "單字卡直接推送到 LINE 聊天室，一鍵收藏到筆記本、隨時複習",
+    color: "bg-bloom-light text-bloom",
+    ringColor: "ring-bloom/30",
   },
 ];
 
@@ -130,7 +138,7 @@ export default function HowItWorks() {
             How it works
           </span>
           <h2 className="font-heading font-extrabold text-3xl sm:text-4xl text-earth mt-3">
-            三步成詞
+            輕鬆四步，截圖成詞
           </h2>
           <p className="text-earth-light mt-3 max-w-md mx-auto">
             從截圖到記憶，比你想的還要簡單
