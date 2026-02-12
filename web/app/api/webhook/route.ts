@@ -73,10 +73,14 @@ export async function POST(request: NextRequest) {
 
   // Verify signature for actual events
   if (!verifySignature(body, signature)) {
-    console.log("[webhook] Signature FAILED — secret length:", (process.env.LINE_CHANNEL_SECRET || "").length, "sig:", signature.slice(0, 8) + "...");
-    return NextResponse.json({ error: "Invalid signature" }, { status: 403 });
+    // Temporary debug: return info to diagnose secret mismatch
+    const secretLen = (process.env.LINE_CHANNEL_SECRET || "").length;
+    const secretPrefix = (process.env.LINE_CHANNEL_SECRET || "").slice(0, 4);
+    return NextResponse.json({
+      error: "Invalid signature",
+      debug: { secretLen, secretPrefix, sigReceived: signature.slice(0, 12) },
+    }, { status: 403 });
   }
-  console.log("[webhook] Signature verified OK");
 
   // Return 200 immediately (LINE expects fast response),
   // but keep the serverless function alive to process events via waitUntil
