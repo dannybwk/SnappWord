@@ -130,15 +130,20 @@ async function processScreenshot(
 
   try {
     // Download image from LINE
+    console.log("[process] Downloading image:", messageId);
     const imageBytes = await getMessageContent(messageId);
+    console.log("[process] Image downloaded, size:", imageBytes.length);
     await logEvent(userId, "image_received", {
       payload: { message_id: messageId },
     });
 
     // Upload to Supabase Storage
+    console.log("[process] Uploading to Supabase Storage...");
     const imageUrl = await uploadImage(imageBytes, userId);
+    console.log("[process] Uploaded:", imageUrl);
 
     // AI analysis
+    console.log("[process] Calling Gemini...");
     const [parseResult, metadata] = await analyzeScreenshot(imageBytes);
     await logEvent(userId, "gemini_call", {
       latencyMs: metadata.latencyMs,
@@ -172,7 +177,7 @@ async function processScreenshot(
     const flexMsg = buildVocabCarousel(wordCardPairs, parseResult.source_app);
     await pushMessage(lineUserId, [flexMsg]);
   } catch (err) {
-    console.error("processScreenshot error:", err);
+    console.error("[process] FAILED at step:", String(err));
     await logEvent(userId, "parse_fail", {
       payload: { error: String(err) },
     });
