@@ -1,0 +1,104 @@
+# SnappWord 截詞 — Complete Product Guide
+
+> AI-powered LINE Bot that turns language-learning screenshots into structured vocabulary flashcards in ~7 seconds.
+
+## What is SnappWord?
+
+SnappWord (截詞) is a LINE Bot for language learners. Users send a screenshot from any learning app or reading material, and AI (Google Gemini) analyzes the image to extract vocabulary words. Each word becomes a structured flashcard with: word, pronunciation, translation, context sentence with translation, and an AI-generated example sentence. Cards are delivered as LINE Flex Messages and stored in a personal dashboard.
+
+## How It Works
+
+1. **Screenshot** — Take a screenshot in any app (Duolingo, Netflix subtitles, articles, textbooks, etc.)
+2. **Send to LINE** — Send the screenshot to the SnappWord LINE Bot
+3. **AI Analysis** — Google Gemini multimodal AI extracts vocabulary in ~7 seconds
+4. **Receive Cards** — Get beautiful flashcards directly in LINE chat
+
+## Supported Languages
+
+- English 🇺🇸
+- Japanese 🇯🇵
+- Korean 🇰🇷
+- Spanish 🇪🇸
+- French 🇫🇷
+- German 🇩🇪
+
+The AI automatically detects the source and target languages from the screenshot.
+
+## Features
+
+- **AI Vocabulary Extraction** — Multimodal AI reads screenshots and identifies learning-relevant words
+- **Structured Flashcards** — Each card includes word, pronunciation, translation, context, and AI example
+- **Spaced Repetition (SRS)** — Interval-based review system (1, 3, 7, 14, 30 days)
+- **Quiz Mode** — Multiple-choice quizzes generated from your vocabulary
+- **Personal Dashboard** — Web dashboard at snappword.com/dashboard with stats, charts, and card management
+- **Export** — Export vocabulary to CSV or Anki format
+- **Multi-Source Support** — Works with Duolingo, Netflix, YouTube, articles, textbooks, and any text-containing image
+
+## Pricing Plans
+
+### Seed (Free) — NT$0
+- 30 screenshots per month
+- 3 language support
+- Basic flashcard generation
+- LINE push delivery
+
+### Sprout — NT$99/month
+- 200 screenshots per month
+- 6 languages (all supported)
+- AI smart example sentences
+- SRS spaced repetition system
+- Anki/CSV export
+- Quiz mode
+
+### Bloom — NT$249/month
+- Unlimited screenshots
+- 6 languages (all supported)
+- AI examples + context analysis
+- Advanced SRS system
+- All export formats
+- Quiz mode + statistics
+- Priority support
+
+### Payment Methods
+- JKO Pay (街口支付)
+- PayPal
+- Bank transfer (Cathay United Bank)
+
+Minimum 1 month payment required. Multi-month payment supported.
+
+## Technical Stack
+
+- **Runtime:** Next.js (TypeScript) + Python FastAPI on Vercel Serverless
+- **Database:** Supabase (PostgreSQL)
+- **AI:** Google Gemini 1.5 Flash (multimodal)
+- **Messaging:** LINE Messaging API (Webhook + Flex Messages)
+- **Storage:** Supabase Storage
+
+## Company
+
+- **Operator:** T+STUDIO (梯加有限公司)
+- **Location:** Taiwan
+- **Contact:** tplusstudio@gmail.com
+- **LINE:** @snappword
+- **Website:** https://snappword.com
+- **Jurisdiction:** Taiwan ROC law
+
+## FAQ
+
+**Q: What screenshots work?**
+A: Any screenshot containing text in a supported language — Duolingo lessons, Netflix subtitles, YouTube captions, news articles, textbook pages, social media posts, etc.
+
+**Q: Is it free?**
+A: Yes, the Seed plan is free forever with 30 screenshots per month.
+
+**Q: How fast is it?**
+A: AI analysis typically completes in about 7 seconds.
+
+**Q: How do I start?**
+A: Add @snappword as a friend on LINE and send your first screenshot.
+
+**Q: Can I export my vocabulary?**
+A: Yes, paid plans support CSV and Anki deck export from the dashboard.
+
+**Q: What about my data privacy?**
+A: Screenshots are processed by Google Gemini AI and stored encrypted in Supabase. Screenshots are deleted after 30 days. See full privacy policy at snappword.com/privacy.

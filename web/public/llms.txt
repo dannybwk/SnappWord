@@ -1,0 +1,25 @@
+# SnappWord 截詞
+
+> AI-powered LINE Bot that turns language-learning screenshots into structured vocabulary flashcards.
+
+SnappWord lets users send screenshots from any language-learning app (Duolingo, Netflix, articles, etc.) to a LINE Bot. AI analyzes the image in ~7 seconds and returns beautiful flashcards with word, pronunciation, translation, context sentence, and example usage.
+
+## Key Info
+
+- Website: https://snappword.com
+- Platform: LINE Messaging App (Bot)
+- AI Engine: Google Gemini (multimodal image analysis)
+- Supported Languages: English, Japanese, Korean, Spanish, French, German
+- Pricing: Free (30 screenshots/month), Sprout NT$99/month (200), Bloom NT$249/month (unlimited)
+
+## Pages
+
+- [Home](https://snappword.com): Landing page with product overview, how it works, demo, features, testimonials
+- [Pricing](https://snappword.com/pricing): Three-tier pricing plans and payment methods
+- [Dashboard](https://snappword.com/dashboard): User's vocabulary cards, review queue, stats, quiz, export
+- [Privacy Policy](https://snappword.com/privacy): Data collection, storage, third-party services, user rights
+- [Terms of Service](https://snappword.com/terms): Usage rules, billing, IP rights, jurisdiction (Taiwan ROC)
+
+## Optional
+
+- [llms-full.txt](https://snappword.com/llms-full.txt): Detailed product information
