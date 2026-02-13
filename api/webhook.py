@@ -160,7 +160,7 @@ async def _process_screenshot(line_user_id: str, message_id: str) -> None:
         if not parse_result.words:
             await push_message(line_user_id, [
                 build_error_message(
-                    "我在這張截圖中沒有找到可以學習的單字 🤔\n"
+                    "我在這張截圖中沒有發現你在學習的單字 🤔\n"
                     "試試傳送 Duolingo、Netflix 字幕或文章的截圖！"
                 )
             ])

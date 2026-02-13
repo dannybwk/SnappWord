@@ -163,7 +163,7 @@ async function processScreenshot(
     if (parseResult.words.length === 0) {
       await pushMessage(lineUserId, [
         buildErrorMessage(
-          "我在這張截圖中沒有找到可以學習的單字 🤔\n" +
+          "我在這張截圖中沒有發現你在學習的單字 🤔\n" +
             "試試傳送 Duolingo、Netflix 字幕或文章的截圖！"
         ),
       ]);
