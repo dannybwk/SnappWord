@@ -160,6 +160,17 @@ async def _process_screenshot(line_user_id: str, message_id: str) -> None:
                     "已收到你的付款截圖！我們會在 24 小時內為你升級 🎉"
                 )
             ])
+            # Notify admin via LINE
+            if config.ADMIN_LINE_USER_ID:
+                tier = upgrade_req.get("tier", "unknown")
+                await push_message(config.ADMIN_LINE_USER_ID, [
+                    build_error_message(
+                        f"🔔 新付費通知\n\n"
+                        f"用戶：{display_name or line_user_id}\n"
+                        f"方案：{tier}\n\n"
+                        f"請至後台審核 👉 snappword.com/admin"
+                    )
+                ])
             return
 
         # Check rate limit & monthly quota before processing

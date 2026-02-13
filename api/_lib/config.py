@@ -13,6 +13,9 @@ SUPABASE_SERVICE_KEY: str = os.environ.get("SUPABASE_SERVICE_KEY", "").strip()
 # Google Gemini
 GEMINI_API_KEY: str = os.environ.get("GEMINI_API_KEY", "").strip()
 
+# Admin notification
+ADMIN_LINE_USER_ID: str = os.environ.get("ADMIN_LINE_USER_ID", "").strip()
+
 # Storage
 STORAGE_BUCKET = "user_screenshots"
 
