@@ -1,31 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { createHmac, timingSafeEqual } from "crypto";
 
-const COOKIE_NAME = "admin_token";
-const MAX_AGE = 86400;
-
-function verifyToken(token: string): boolean {
-  const password = process.env.ADMIN_PASSWORD || "";
-  if (!password) return false;
-
-  const parts = token.split(".");
-  if (parts.length !== 2) return false;
-
-  const [timestamp, signature] = parts;
-  const ts = parseInt(timestamp, 10);
-  if (isNaN(ts)) return false;
-  if (Date.now() - ts > MAX_AGE * 1000) return false;
-
-  const expected = createHmac("sha256", password).update(timestamp).digest("hex");
-  try {
-    return timingSafeEqual(
-      Buffer.from(signature, "hex"),
-      Buffer.from(expected, "hex")
-    );
-  } catch {
-    return false;
-  }
+function getAdminEmails(): string[] {
+  return (process.env.ADMIN_EMAILS || "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
 }
 
 function getClient() {
@@ -36,8 +16,18 @@ function getClient() {
 }
 
 export async function GET(request: NextRequest) {
-  const token = request.cookies.get(COOKIE_NAME)?.value;
-  if (!token || !verifyToken(token)) {
+  // Verify Supabase token + email whitelist
+  const authHeader = request.headers.get("authorization");
+  const token = authHeader?.replace("Bearer ", "");
+
+  if (!token) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const sbAuth = getClient();
+  const { data: { user }, error: authError } = await sbAuth.auth.getUser(token);
+
+  if (authError || !user?.email || !getAdminEmails().includes(user.email.toLowerCase())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

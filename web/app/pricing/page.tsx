@@ -1,26 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { motion } from "framer-motion";
-import { pricingPlans } from "@/lib/constants";
+import { motion, AnimatePresence } from "framer-motion";
+import { pricingPlans, paymentInfo } from "@/lib/constants";
 import Nav from "@/components/ui/Nav";
 import Footer from "@/components/ui/Footer";
 import Button from "@/components/ui/Button";
 import { SparklesDoodle } from "@/components/ui/DoodleSVG";
 
+type PaidPlan = (typeof pricingPlans)[1] | (typeof pricingPlans)[2];
+
 function PricingCard({
   plan,
   index,
-  onSubscribe,
-  subscribing,
+  onSelect,
 }: {
   plan: (typeof pricingPlans)[number];
   index: number;
-  onSubscribe: (tier: string) => void;
-  subscribing: string | null;
+  onSelect: (plan: PaidPlan) => void;
 }) {
-  const isLoading = subscribing === plan.tierId;
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 30 }}
@@ -92,40 +90,110 @@ function PricingCard({
           variant={plan.highlighted ? "primary" : "outline"}
           fullWidth
           size="lg"
-          onClick={() => onSubscribe(plan.tierId)}
-          disabled={isLoading}
+          onClick={() => onSelect(plan as PaidPlan)}
         >
-          {isLoading ? "處理中..." : plan.cta}
+          {plan.cta}
         </Button>
       )}
     </motion.div>
   );
 }
 
+function PaymentModal({
+  plan,
+  onClose,
+}: {
+  plan: PaidPlan;
+  onClose: () => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+        transition={{ type: "spring", stiffness: 300, damping: 25 }}
+        className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 md:p-8"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="text-center mb-6">
+          <h2 className="font-heading font-extrabold text-xl text-earth">
+            升級到{plan.name}
+          </h2>
+          <p className="text-earth-light text-sm mt-1">
+            NT${plan.price} / {plan.period}
+          </p>
+        </div>
+
+        {/* Payment methods */}
+        <div className="space-y-4">
+          {/* JKO Pay */}
+          <a
+            href={paymentInfo.jkoPay.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 p-4 rounded-2xl border border-mist/60 hover:border-seed/40 hover:bg-sprout-light/30 transition-colors"
+          >
+            <span className="text-2xl">💳</span>
+            <div className="flex-1 min-w-0">
+              <div className="font-heading font-bold text-sm text-earth">
+                {paymentInfo.jkoPay.name}
+              </div>
+              <div className="text-xs text-earth-light mt-0.5">
+                帳號：{paymentInfo.jkoPay.account}
+              </div>
+            </div>
+            <span className="text-seed text-sm font-medium shrink-0">前往轉帳 →</span>
+          </a>
+
+          {/* PayPal */}
+          <a
+            href={paymentInfo.paypal.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 p-4 rounded-2xl border border-mist/60 hover:border-sky/40 hover:bg-sky-light/30 transition-colors"
+          >
+            <span className="text-2xl">🅿️</span>
+            <div className="flex-1 min-w-0">
+              <div className="font-heading font-bold text-sm text-earth">
+                {paymentInfo.paypal.name}
+              </div>
+              <div className="text-xs text-earth-light mt-0.5">
+                {paymentInfo.paypal.email}
+              </div>
+            </div>
+            <span className="text-sky text-sm font-medium shrink-0">前往付款 →</span>
+          </a>
+        </div>
+
+        {/* Instructions */}
+        <div className="mt-6 p-4 rounded-2xl bg-cloud/80 text-sm text-earth-light space-y-1.5">
+          <p className="font-medium text-earth">付款後請：</p>
+          <p>1. 截圖付款成功畫面</p>
+          <p>2. 在 LINE 搜尋 <span className="font-bold text-seed">{paymentInfo.contactLine}</span></p>
+          <p>3. 傳送截圖給我們，我們會在 24 小時內為你升級</p>
+        </div>
+
+        {/* Close */}
+        <div className="mt-6">
+          <Button variant="outline" fullWidth onClick={onClose}>
+            關閉
+          </Button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 export default function PricingPage() {
-  const [subscribing, setSubscribing] = useState<string | null>(null);
-
-  async function handleSubscribe(tier: string) {
-    setSubscribing(tier);
-
-    try {
-      // First check if user is logged in by trying to get their info
-      // If they're not logged in, redirect to dashboard (which shows login)
-      const meRes = await fetch("/api/auth/me?lineUserId=check");
-      if (!meRes.ok) {
-        window.location.href = "/dashboard";
-        return;
-      }
-
-      // Try to get userId from localStorage/LIFF context
-      // Since pricing page might not have AuthProvider, we redirect through dashboard
-      window.location.href = `/dashboard?subscribe=${tier}`;
-    } catch {
-      window.location.href = `/dashboard?subscribe=${tier}`;
-    } finally {
-      setSubscribing(null);
-    }
-  }
+  const [selectedPlan, setSelectedPlan] = useState<PaidPlan | null>(null);
 
   return (
     <>
@@ -157,8 +225,7 @@ export default function PricingPage() {
                 key={plan.nameEn}
                 plan={plan}
                 index={i}
-                onSubscribe={handleSubscribe}
-                subscribing={subscribing}
+                onSelect={setSelectedPlan}
               />
             ))}
           </div>
@@ -175,6 +242,16 @@ export default function PricingPage() {
         </div>
       </main>
       <Footer />
+
+      {/* Payment Modal */}
+      <AnimatePresence>
+        {selectedPlan && (
+          <PaymentModal
+            plan={selectedPlan}
+            onClose={() => setSelectedPlan(null)}
+          />
+        )}
+      </AnimatePresence>
     </>
   );
 }

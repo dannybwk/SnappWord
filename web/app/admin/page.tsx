@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase";
 import KpiCards from "@/components/admin/KpiCards";
 import { UserGrowthChart, DailyCardsChart, ErrorRateChart } from "@/components/admin/TimeSeriesCharts";
 import DistributionCharts from "@/components/admin/DistributionCharts";
 import AdminTables from "@/components/admin/AdminTables";
+import UserManagement from "@/components/admin/UserManagement";
 
 interface StatsData {
   kpis: {
@@ -37,13 +39,22 @@ export default function AdminPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch("/api/admin/stats")
-      .then((r) => {
-        if (!r.ok) throw new Error("Failed to load stats");
-        return r.json();
-      })
-      .then(setData)
-      .catch((e) => setError(e.message));
+    async function load() {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        setError("未登入");
+        return;
+      }
+
+      const res = await fetch("/api/admin/stats", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) throw new Error("Failed to load stats");
+      setData(await res.json());
+    }
+
+    load().catch((e) => setError(e.message));
   }, []);
 
   if (error) {
@@ -79,6 +90,12 @@ export default function AdminPage() {
       {/* KPI Cards */}
       <section>
         <KpiCards data={data.kpis} />
+      </section>
+
+      {/* User Management */}
+      <section>
+        <h2 className="font-heading font-bold text-lg text-earth mb-3">用戶管理</h2>
+        <UserManagement />
       </section>
 
       {/* Time Series */}

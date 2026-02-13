@@ -1,88 +1,61 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createHmac, timingSafeEqual } from "crypto";
+import { createClient } from "@supabase/supabase-js";
 
-const COOKIE_NAME = "admin_token";
-const MAX_AGE = 86400; // 24 hours
-
-function getPassword(): string {
-  return process.env.ADMIN_PASSWORD || "";
+function getAdminEmails(): string[] {
+  return (process.env.ADMIN_EMAILS || "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
 }
 
-function sign(timestamp: string): string {
-  return createHmac("sha256", getPassword())
-    .update(timestamp)
-    .digest("hex");
+function getServiceClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+    process.env.SUPABASE_SERVICE_ROLE_KEY || ""
+  );
 }
 
-function verifyToken(token: string): boolean {
-  const parts = token.split(".");
-  if (parts.length !== 2) return false;
-
-  const [timestamp, signature] = parts;
-  const ts = parseInt(timestamp, 10);
-  if (isNaN(ts)) return false;
-
-  // Check expiry
-  if (Date.now() - ts > MAX_AGE * 1000) return false;
-
-  const expected = sign(timestamp);
-  try {
-    return timingSafeEqual(
-      Buffer.from(signature, "hex"),
-      Buffer.from(expected, "hex")
-    );
-  } catch {
-    return false;
-  }
-}
-
-/** POST — Login: verify password, set cookie */
+/** POST — Check if email is in whitelist */
 export async function POST(request: NextRequest) {
-  const password = getPassword();
-  if (!password) {
-    return NextResponse.json(
-      { error: "ADMIN_PASSWORD not configured" },
-      { status: 500 }
-    );
-  }
-
   const body = await request.json().catch(() => ({}));
-  if (body.password !== password) {
-    return NextResponse.json({ error: "Invalid password" }, { status: 401 });
+  const email = (body.email || "").trim().toLowerCase();
+
+  if (!email) {
+    return NextResponse.json({ error: "Email required" }, { status: 400 });
   }
 
-  const timestamp = String(Date.now());
-  const token = `${timestamp}.${sign(timestamp)}`;
+  const allowed = getAdminEmails();
+  if (allowed.length === 0) {
+    return NextResponse.json({ error: "ADMIN_EMAILS not configured" }, { status: 500 });
+  }
 
-  const res = NextResponse.json({ ok: true });
-  res.cookies.set(COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: MAX_AGE,
-    path: "/",
-  });
-  return res;
+  if (!allowed.includes(email)) {
+    return NextResponse.json({ error: "Unauthorized email" }, { status: 403 });
+  }
+
+  return NextResponse.json({ ok: true });
 }
 
-/** GET — Verify cookie */
+/** GET — Verify Supabase token + email whitelist */
 export async function GET(request: NextRequest) {
-  const token = request.cookies.get(COOKIE_NAME)?.value;
-  if (!token || !verifyToken(token)) {
+  const authHeader = request.headers.get("authorization");
+  const token = authHeader?.replace("Bearer ", "");
+
+  if (!token) {
     return NextResponse.json({ authenticated: false }, { status: 401 });
   }
-  return NextResponse.json({ authenticated: true });
-}
 
-/** DELETE — Logout: clear cookie */
-export async function DELETE() {
-  const res = NextResponse.json({ ok: true });
-  res.cookies.set(COOKIE_NAME, "", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 0,
-    path: "/",
-  });
-  return res;
+  const sb = getServiceClient();
+  const { data: { user }, error } = await sb.auth.getUser(token);
+
+  if (error || !user?.email) {
+    return NextResponse.json({ authenticated: false }, { status: 401 });
+  }
+
+  const allowed = getAdminEmails();
+  if (!allowed.includes(user.email.toLowerCase())) {
+    return NextResponse.json({ authenticated: false, error: "Not an admin" }, { status: 403 });
+  }
+
+  return NextResponse.json({ authenticated: true, email: user.email });
 }

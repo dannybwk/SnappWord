@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuth } from "@/components/auth/AuthProvider";
 import ReviewQueue from "@/components/dashboard/ReviewQueue";
@@ -40,7 +39,6 @@ export interface VocabCard {
 export default function DashboardPage() {
   const greeting = getGreeting();
   const { user } = useAuth();
-  const searchParams = useSearchParams();
   const [cards, setCards] = useState<VocabCard[]>([]);
   const [quota, setQuota] = useState<{ used: number; limit: number; tier?: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -65,30 +63,6 @@ export default function DashboardPage() {
 
     fetchCards();
   }, [user?.dbUserId]);
-
-  // Handle ?subscribe=tier redirect from pricing page
-  useEffect(() => {
-    const tier = searchParams.get("subscribe");
-    if (!tier || !user?.dbUserId) return;
-
-    async function startCheckout() {
-      try {
-        const res = await fetch("/api/stripe/checkout", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: user!.dbUserId, tier }),
-        });
-        const data = await res.json();
-        if (data.url) {
-          window.location.href = data.url;
-        }
-      } catch {
-        // Checkout failed, just stay on dashboard
-      }
-    }
-
-    startCheckout();
-  }, [searchParams, user?.dbUserId]);
 
   const totalWords = cards.length;
   const now = Date.now();

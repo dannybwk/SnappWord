@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { LeafDoodle } from "@/components/ui/DoodleSVG";
+import { createClient } from "@/lib/supabase";
 
 function AdminShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -11,16 +12,34 @@ function AdminShell({ children }: { children: React.ReactNode }) {
   const [authed, setAuthed] = useState<boolean | null>(null);
 
   useEffect(() => {
-    fetch("/api/admin/auth")
-      .then((r) => {
-        if (r.ok) setAuthed(true);
-        else setAuthed(false);
-      })
-      .catch(() => setAuthed(false));
-  }, []);
+    // Login page and callback bypass auth check
+    if (pathname === "/admin/login" || pathname.startsWith("/admin/auth/")) {
+      setAuthed(true);
+      return;
+    }
 
-  // Login page bypasses auth shell
-  if (pathname === "/admin/login") {
+    async function checkAuth() {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        setAuthed(false);
+        return;
+      }
+
+      // Verify token + email whitelist server-side
+      const res = await fetch("/api/admin/auth", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+
+      setAuthed(res.ok);
+    }
+
+    checkAuth();
+  }, [pathname]);
+
+  // Login page renders directly without shell
+  if (pathname === "/admin/login" || pathname.startsWith("/admin/auth/")) {
     return <>{children}</>;
   }
 
@@ -41,7 +60,8 @@ function AdminShell({ children }: { children: React.ReactNode }) {
   }
 
   async function handleLogout() {
-    await fetch("/api/admin/auth", { method: "DELETE" });
+    const supabase = createClient();
+    await supabase.auth.signOut();
     router.push("/admin/login");
   }
 

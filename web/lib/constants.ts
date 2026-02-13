@@ -125,6 +125,21 @@ export const supportedLanguages = [
   { name: "德語", flag: "🇩🇪" },
 ] as const;
 
+// ── Payment info (manual transfer) ──
+export const paymentInfo = {
+  jkoPay: {
+    name: "街口支付",
+    account: "900348041",
+    url: "https://service.jkopay.com/r/transfer?j=Transfer:900348041",
+  },
+  paypal: {
+    name: "PayPal",
+    email: "smallbe@gmail.com",
+    url: "https://paypal.me/smallbe",
+  },
+  contactLine: "@snappword",
+} as const;
+
 // ── Pricing plans ──
 export const pricingPlans = [
   {
