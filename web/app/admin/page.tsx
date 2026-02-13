@@ -3,6 +3,9 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase";
 import KpiCards from "@/components/admin/KpiCards";
+import RevenueCards from "@/components/admin/RevenueCards";
+import ExpiringUsersTable from "@/components/admin/ExpiringUsersTable";
+import RetentionCards from "@/components/admin/RetentionCards";
 import { UserGrowthChart, DailyCardsChart, ErrorRateChart } from "@/components/admin/TimeSeriesCharts";
 import DistributionCharts from "@/components/admin/DistributionCharts";
 import AdminTables from "@/components/admin/AdminTables";
@@ -32,6 +35,24 @@ interface StatsData {
   tables: {
     recentUsers: never[];
     recentErrors: never[];
+  };
+  revenue: {
+    monthly: number;
+    total: number;
+    paidUsers: number;
+    conversionRate: number;
+  };
+  expiringUsers: {
+    id: string;
+    displayName: string;
+    tier: string;
+    expiresAt: string;
+    daysLeft: number;
+  }[];
+  retention: {
+    d1: { rate: number; retained: number; eligible: number };
+    d7: { rate: number; retained: number; eligible: number };
+    d30: { rate: number; retained: number; eligible: number };
   };
 }
 
@@ -91,6 +112,24 @@ export default function AdminPage() {
       {/* KPI Cards */}
       <section>
         <KpiCards data={data.kpis} />
+      </section>
+
+      {/* Revenue */}
+      <section>
+        <h2 className="font-heading font-bold text-lg text-earth mb-3">營收總覽</h2>
+        <RevenueCards data={data.revenue} />
+      </section>
+
+      {/* Expiring Users */}
+      <section>
+        <h2 className="font-heading font-bold text-lg text-earth mb-3">即將到期用戶</h2>
+        <ExpiringUsersTable users={data.expiringUsers} />
+      </section>
+
+      {/* Retention */}
+      <section>
+        <h2 className="font-heading font-bold text-lg text-earth mb-3">留存率</h2>
+        <RetentionCards data={data.retention} />
       </section>
 
       {/* User Management */}
