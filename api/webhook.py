@@ -72,12 +72,43 @@ async def _handle_event(event: dict) -> None:
     """Route event to appropriate handler."""
     event_type = event.get("type")
     try:
-        if event_type == "message":
+        if event_type == "follow":
+            await _handle_follow(event)
+        elif event_type == "message":
             await _handle_message(event)
         elif event_type == "postback":
             await _handle_postback(event)
     except Exception:
         logger.exception("Unhandled error in event handler")
+
+
+async def _handle_follow(event: dict) -> None:
+    """Welcome message when a user adds the bot as a friend."""
+    reply_token = event.get("replyToken", "")
+    source = event.get("source", {})
+    line_user_id = source.get("userId")
+
+    if not line_user_id:
+        return
+
+    # Ensure user record exists
+    profile = await get_user_profile(line_user_id)
+    display_name = profile["displayName"] if profile else None
+    await asyncio.to_thread(get_or_create_user, line_user_id, display_name)
+
+    await reply_text(
+        reply_token,
+        "嗨！歡迎加入 SnappWord 截詞 👋\n\n"
+        "我是你的 AI 單字卡助手 ✨\n"
+        "只要把學語言時的截圖傳給我，我就能幫你秒變精美單字卡！\n\n"
+        "📸 支援各種來源：\n"
+        "• Duolingo、Busuu 等學習 App\n"
+        "• Netflix、YouTube 字幕\n"
+        "• 文章、新聞、任何有生字的畫面\n\n"
+        "🚀 現在就試試看吧！\n"
+        "傳一張截圖給我，幾秒後就能收到你的第一組單字卡。\n\n"
+        "💡 輸入「幫助」可隨時查看使用說明",
+    )
 
 
 async def _handle_message(event: dict) -> None:
