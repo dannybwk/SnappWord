@@ -7,6 +7,7 @@ import { UserGrowthChart, DailyCardsChart, ErrorRateChart } from "@/components/a
 import DistributionCharts from "@/components/admin/DistributionCharts";
 import AdminTables from "@/components/admin/AdminTables";
 import UserManagement from "@/components/admin/UserManagement";
+import UpgradeRequests from "@/components/admin/UpgradeRequests";
 
 interface StatsData {
   kpis: {
@@ -96,6 +97,12 @@ export default function AdminPage() {
       <section>
         <h2 className="font-heading font-bold text-lg text-earth mb-3">用戶管理</h2>
         <UserManagement />
+      </section>
+
+      {/* Upgrade Requests */}
+      <section>
+        <h2 className="font-heading font-bold text-lg text-earth mb-3">升級申請</h2>
+        <UpgradeRequests />
       </section>
 
       {/* Time Series */}

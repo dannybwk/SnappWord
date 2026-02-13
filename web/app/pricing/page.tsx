@@ -171,11 +171,28 @@ function PaymentModal({
             </div>
             <span className="text-sky text-sm font-medium shrink-0">前往付款 →</span>
           </a>
+
+          {/* Bank Transfer */}
+          <div className="flex items-center gap-3 p-4 rounded-2xl border border-mist/60">
+            <span className="text-2xl">🏦</span>
+            <div className="flex-1 min-w-0">
+              <div className="font-heading font-bold text-sm text-earth">
+                {paymentInfo.bankTransfer.name}
+              </div>
+              <div className="text-xs text-earth-light mt-0.5 space-y-0.5">
+                <p>{paymentInfo.bankTransfer.bank}・{paymentInfo.bankTransfer.branch}</p>
+                <p>帳號：{paymentInfo.bankTransfer.account}</p>
+                <p>戶名：{paymentInfo.bankTransfer.holder}</p>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Instructions */}
         <div className="mt-6 p-4 rounded-2xl bg-cloud/80 text-sm text-earth-light space-y-1.5">
-          <p className="font-medium text-earth">付款後請：</p>
+          <p className="font-medium text-earth">付款說明：</p>
+          <p>• 最少支付 1 個月，也可以一次支付多個月（金額 = 月費 × 月數）</p>
+          <p className="font-medium text-earth mt-2">付款後請：</p>
           <p>1. 截圖付款成功畫面</p>
           <p>2. 回到 SnappWord LINE 官方帳號，輸入「<span className="font-bold text-seed">升級</span>」並傳送付款截圖</p>
           <p>3. 我們會在 24 小時內為你升級</p>

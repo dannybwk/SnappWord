@@ -40,7 +40,7 @@ export default function DashboardPage() {
   const greeting = getGreeting();
   const { user } = useAuth();
   const [cards, setCards] = useState<VocabCard[]>([]);
-  const [quota, setQuota] = useState<{ used: number; limit: number; tier?: string } | null>(null);
+  const [quota, setQuota] = useState<{ used: number; limit: number; tier?: string; expiresAt?: string | null } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -106,19 +106,32 @@ export default function DashboardPage() {
               )}
             </p>
             {quota && !loading && (
-              <p className="text-earth-light/80 text-sm mt-1">
-                📸 本月截圖額度：{quota.used}/{quota.limit === Infinity ? "∞" : quota.limit}
-                {quota.tier && quota.tier !== "free" && (
-                  <span className="text-seed font-bold ml-2">
-                    {quota.tier === "sprout" ? "🌱 嫩芽" : "🌸 綻放"}
-                  </span>
+              <>
+                <p className="text-earth-light/80 text-sm mt-1">
+                  📸 本月截圖額度：{quota.used}/{quota.limit === Infinity ? "∞" : quota.limit}
+                  {quota.tier && quota.tier !== "free" && (
+                    <span className="text-seed font-bold ml-2">
+                      {quota.tier === "sprout" ? "🌱 嫩芽" : "🌸 綻放"}
+                    </span>
+                  )}
+                  {quota.limit !== Infinity && quota.used >= quota.limit && (
+                    <Link href="/pricing" className="text-bloom font-bold ml-2 hover:underline">
+                      升級方案 →
+                    </Link>
+                  )}
+                </p>
+                {quota.expiresAt && quota.tier && quota.tier !== "free" && (
+                  <p className="text-earth-light/80 text-sm mt-0.5">
+                    📅 方案到期日：{new Date(quota.expiresAt).getFullYear()}/{new Date(quota.expiresAt).getMonth() + 1}/{new Date(quota.expiresAt).getDate()}
+                    {(() => {
+                      const daysLeft = Math.ceil((new Date(quota.expiresAt).getTime() - Date.now()) / 86400000);
+                      if (daysLeft <= 0) return <span className="text-red-500 font-bold ml-2">已過期</span>;
+                      if (daysLeft <= 7) return <span className="text-bloom font-bold ml-2">剩 {daysLeft} 天</span>;
+                      return null;
+                    })()}
+                  </p>
                 )}
-                {quota.limit !== Infinity && quota.used >= quota.limit && (
-                  <Link href="/pricing" className="text-bloom font-bold ml-2 hover:underline">
-                    升級方案 →
-                  </Link>
-                )}
-              </p>
+              </>
             )}
           </div>
           <Link href="/quiz">

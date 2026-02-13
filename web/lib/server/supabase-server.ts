@@ -394,6 +394,168 @@ export async function getAllCardTranslations(
   return (data || []) as { id: string; translation: string; target_lang: string }[];
 }
 
+// ── Upgrade Requests ──
+
+export interface UpgradeRequest {
+  id: string;
+  user_id: string;
+  payment_image_url: string | null;
+  status: string;
+  approved_tier: string | null;
+  months_paid: number;
+  created_at: string;
+  reviewed_at: string | null;
+}
+
+/** Create a new upgrade request in waiting_image state. */
+export async function createUpgradeRequest(userId: string): Promise<UpgradeRequest> {
+  const sb = getClient();
+  const { data, error } = await sb
+    .from("upgrade_requests")
+    .insert({ user_id: userId, status: "waiting_image" })
+    .select()
+    .single();
+  if (error) throw new Error(`Failed to create upgrade request: ${error.message}`);
+  return data as UpgradeRequest;
+}
+
+/** Get a recent waiting_image upgrade request (within 10 minutes). */
+export async function getPendingUpgradeRequest(
+  userId: string
+): Promise<UpgradeRequest | null> {
+  const sb = getClient();
+  const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+
+  const { data } = await sb
+    .from("upgrade_requests")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("status", "waiting_image")
+    .gte("created_at", tenMinAgo)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  return (data as UpgradeRequest) || null;
+}
+
+/** Complete an upgrade request: set image URL and status to pending. */
+export async function completeUpgradeRequest(
+  requestId: string,
+  imageUrl: string
+): Promise<void> {
+  const sb = getClient();
+  await sb
+    .from("upgrade_requests")
+    .update({ status: "pending", payment_image_url: imageUrl })
+    .eq("id", requestId);
+}
+
+/** List upgrade requests (for admin). Optional status filter. */
+export async function getUpgradeRequests(
+  status?: string
+): Promise<(UpgradeRequest & { users: { display_name: string; subscription_tier: string | null; subscription_expires_at: string | null } })[]> {
+  const sb = getClient();
+  let query = sb
+    .from("upgrade_requests")
+    .select("*, users(display_name, subscription_tier, subscription_expires_at)")
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (status && status !== "all") {
+    query = query.eq("status", status);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(`Failed to list upgrade requests: ${error.message}`);
+  return data || [];
+}
+
+/** Admin review: approve or reject an upgrade request. */
+export async function reviewUpgradeRequest(
+  requestId: string,
+  approved: boolean,
+  tier?: string,
+  months?: number
+): Promise<void> {
+  const sb = getClient();
+  const now = new Date();
+  const nowIso = now.toISOString();
+
+  if (approved) {
+    const paidMonths = months || 1;
+
+    // Get user_id + current expiry from the request
+    const { data: req } = await sb
+      .from("upgrade_requests")
+      .select("user_id")
+      .eq("id", requestId)
+      .single();
+
+    if (!req) throw new Error("Upgrade request not found");
+
+    // Calculate expiry: extend from current expiry if still active, otherwise from now
+    const { data: user } = await sb
+      .from("users")
+      .select("subscription_expires_at")
+      .eq("id", req.user_id)
+      .single();
+
+    const currentExpiry = user?.subscription_expires_at
+      ? new Date(user.subscription_expires_at)
+      : null;
+    const base = currentExpiry && currentExpiry > now ? currentExpiry : now;
+    const expiresAt = new Date(base);
+    expiresAt.setMonth(expiresAt.getMonth() + paidMonths);
+
+    // Update request status
+    await sb
+      .from("upgrade_requests")
+      .update({
+        status: "approved",
+        approved_tier: tier || "sprout",
+        months_paid: paidMonths,
+        reviewed_at: nowIso,
+      })
+      .eq("id", requestId);
+
+    // Update user tier + expiry
+    await sb
+      .from("users")
+      .update({
+        subscription_tier: tier || "sprout",
+        is_premium: true,
+        subscription_expires_at: expiresAt.toISOString(),
+      })
+      .eq("id", req.user_id);
+  } else {
+    await sb
+      .from("upgrade_requests")
+      .update({ status: "rejected", reviewed_at: nowIso })
+      .eq("id", requestId);
+  }
+}
+
+/** Get users whose subscription expires in exactly N days. */
+export async function getUsersExpiringIn(
+  days: number
+): Promise<{ id: string; line_user_id: string; display_name: string | null; subscription_tier: string; subscription_expires_at: string }[]> {
+  const sb = getClient();
+  const target = new Date();
+  target.setDate(target.getDate() + days);
+  const dayStart = new Date(target.getFullYear(), target.getMonth(), target.getDate()).toISOString();
+  const dayEnd = new Date(target.getFullYear(), target.getMonth(), target.getDate() + 1).toISOString();
+
+  const { data } = await sb
+    .from("users")
+    .select("id, line_user_id, display_name, subscription_tier, subscription_expires_at")
+    .gte("subscription_expires_at", dayStart)
+    .lt("subscription_expires_at", dayEnd)
+    .neq("subscription_tier", "free");
+
+  return (data || []) as { id: string; line_user_id: string; display_name: string | null; subscription_tier: string; subscription_expires_at: string }[];
+}
+
 // ── Logging ──
 
 /** Write an operational log entry. */

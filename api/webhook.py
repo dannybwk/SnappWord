@@ -32,6 +32,10 @@ from _lib.supabase_client import (
     save_vocab_cards,
     update_card_status,
     log_event,
+    create_upgrade_request,
+    get_pending_upgrade_request,
+    complete_upgrade_request,
+    upload_upgrade_proof,
 )
 from _lib.flex_messages import (
     build_vocab_carousel,
@@ -114,6 +118,19 @@ async def _process_screenshot(line_user_id: str, message_id: str) -> None:
     user_id = user["id"]
 
     try:
+        # Check for pending upgrade request (payment screenshot flow)
+        upgrade_req = await asyncio.to_thread(get_pending_upgrade_request, user_id)
+        if upgrade_req:
+            image_bytes = await get_message_content(message_id)
+            image_url = await asyncio.to_thread(upload_upgrade_proof, image_bytes, user_id)
+            await asyncio.to_thread(complete_upgrade_request, upgrade_req["id"], image_url)
+            await push_message(line_user_id, [
+                build_error_message(
+                    "已收到你的付款截圖！我們會在 24 小時內為你升級 🎉"
+                )
+            ])
+            return
+
         # Check rate limit & monthly quota before processing
         quota = await asyncio.to_thread(check_quota, user)
         if not quota["allowed"]:
@@ -201,7 +218,7 @@ async def _process_screenshot(line_user_id: str, message_id: str) -> None:
 
 
 async def _handle_text_command(reply_token: str, line_user_id: str, text: str) -> None:
-    """Handle text commands like help, review, etc."""
+    """Handle text commands like help, upgrade, etc."""
     lower = text.lower()
 
     if lower in ("help", "幫助", "說明"):
@@ -212,6 +229,16 @@ async def _handle_text_command(reply_token: str, line_user_id: str, text: str) -
             "2. 把截圖傳給我\n"
             "3. 幾秒內收到精美單字卡！\n\n"
             "就是這麼簡單 ✨",
+        )
+    elif lower in ("升級", "upgrade"):
+        profile = await get_user_profile(line_user_id)
+        display_name = profile["displayName"] if profile else None
+        user = await asyncio.to_thread(get_or_create_user, line_user_id, display_name)
+        await asyncio.to_thread(create_upgrade_request, user["id"])
+        await reply_text(
+            reply_token,
+            "好的！請傳送付款成功的截圖，我會轉給團隊處理 🧾\n\n"
+            "💡 提醒：最少需支付 1 個月費用，也可一次支付多個月喔！",
         )
     else:
         await reply_text(

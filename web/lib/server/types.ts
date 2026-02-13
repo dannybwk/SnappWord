@@ -26,6 +26,7 @@ export interface DbUser {
   is_premium: boolean;
   stripe_customer_id: string | null;
   subscription_tier: string; // 'free' | 'sprout' | 'bloom'
+  subscription_expires_at: string | null;
   created_at: string;
 }
 

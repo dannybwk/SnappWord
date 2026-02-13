@@ -140,6 +140,13 @@ export const paymentInfo = {
     email: "smallbe@gmail.com",
     url: "https://paypal.me/smallbe",
   },
+  bankTransfer: {
+    name: "銀行轉帳",
+    bank: "國泰世華銀行(013)",
+    branch: "雙和分行",
+    account: "069-03-500840-3",
+    holder: "梯加有限公司",
+  },
   contactLine: "@snappword",
 } as const;
 

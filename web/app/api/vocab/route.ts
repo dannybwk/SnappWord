@@ -64,6 +64,11 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     cards: cardsResult.data || [],
-    quota: { used: usage.used, limit, tier },
+    quota: {
+      used: usage.used,
+      limit,
+      tier,
+      expiresAt: dbUser?.subscription_expires_at || null,
+    },
   });
 }

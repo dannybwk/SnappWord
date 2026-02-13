@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from supabase import create_client, Client
 
@@ -195,6 +195,60 @@ def get_recent_cards(user_id: str, limit: int = 10) -> list[dict]:
         .execute()
     )
     return result.data or []
+
+
+# ── Upgrade Requests ──
+
+
+def create_upgrade_request(user_id: str) -> dict:
+    """Create a new upgrade request in waiting_image state."""
+    sb = _get_client()
+    result = (
+        sb.table("upgrade_requests")
+        .insert({"user_id": user_id, "status": "waiting_image"})
+        .execute()
+    )
+    if not result.data:
+        raise RuntimeError("Failed to create upgrade request")
+    return result.data[0]
+
+
+def get_pending_upgrade_request(user_id: str) -> dict | None:
+    """Get a recent waiting_image upgrade request (within 10 minutes)."""
+    sb = _get_client()
+    ten_min_ago = (
+        datetime.now(timezone.utc) - timedelta(minutes=10)
+    ).isoformat()
+
+    result = (
+        sb.table("upgrade_requests")
+        .select("*")
+        .eq("user_id", user_id)
+        .eq("status", "waiting_image")
+        .gte("created_at", ten_min_ago)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    return result.data[0] if result.data else None
+
+
+def complete_upgrade_request(request_id: str, image_url: str) -> None:
+    """Complete an upgrade request: set image URL and status to pending."""
+    sb = _get_client()
+    sb.table("upgrade_requests").update(
+        {"status": "pending", "payment_image_url": image_url}
+    ).eq("id", request_id).execute()
+
+
+def upload_upgrade_proof(image_bytes: bytes, user_id: str) -> str:
+    """Upload payment proof to Supabase Storage. Returns public URL."""
+    sb = _get_client()
+    filename = f"upgrade_proofs/{user_id}/{uuid.uuid4().hex}.jpg"
+    sb.storage.from_(config.STORAGE_BUCKET).upload(
+        filename, image_bytes, {"content-type": "image/jpeg"}
+    )
+    return sb.storage.from_(config.STORAGE_BUCKET).get_public_url(filename)
 
 
 def log_event(user_id: str | None, event_type: str, **kwargs) -> None:

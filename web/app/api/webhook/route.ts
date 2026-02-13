@@ -33,6 +33,9 @@ import {
   saveVocabCards,
   updateCardStatusWithOwner,
   logEvent,
+  createUpgradeRequest,
+  getPendingUpgradeRequest,
+  completeUpgradeRequest,
 } from "@/lib/server/supabase-server";
 import { buildVocabCarousel, buildErrorMessage } from "@/lib/server/flex-messages";
 import type { LineEvent, ParsedWord } from "@/lib/server/types";
@@ -120,6 +123,20 @@ async function processScreenshot(
     const profile = await getUserProfile(lineUserId);
     const user = await getOrCreateUser(lineUserId, profile?.displayName);
     userId = user.id;
+
+    // Check for pending upgrade request (payment screenshot flow)
+    const upgradeReq = await getPendingUpgradeRequest(userId);
+    if (upgradeReq) {
+      const imageBytes = await getMessageContent(messageId);
+      const imageUrl = await uploadImage(imageBytes, userId);
+      await completeUpgradeRequest(upgradeReq.id, imageUrl);
+      await pushMessage(lineUserId, [
+        buildErrorMessage(
+          "已收到你的付款截圖！我們會在 24 小時內為你升級 🎉"
+        ),
+      ]);
+      return;
+    }
 
     // Check rate limit & monthly quota before processing
     const quota = await checkQuota(user);
@@ -237,7 +254,7 @@ function getUserErrorMessage(err: unknown): string {
 
 async function handleTextCommand(
   replyToken: string,
-  _lineUserId: string,
+  lineUserId: string,
   text: string
 ): Promise<void> {
   const lower = text.trim().toLowerCase();
@@ -250,6 +267,15 @@ async function handleTextCommand(
         "2. 把截圖傳給我\n" +
         "3. 幾秒內收到精美單字卡！\n\n" +
         "就是這麼簡單 ✨"
+    );
+  } else if (["升級", "upgrade"].includes(lower)) {
+    const profile = await getUserProfile(lineUserId);
+    const user = await getOrCreateUser(lineUserId, profile?.displayName);
+    await createUpgradeRequest(user.id);
+    await replyText(
+      replyToken,
+      "好的！請傳送付款成功的截圖，我會轉給團隊處理 🧾\n\n" +
+        "💡 提醒：最少需支付 1 個月費用，也可一次支付多個月喔！"
     );
   } else {
     await replyText(
