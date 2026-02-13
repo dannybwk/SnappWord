@@ -23,7 +23,7 @@ const steps = [
   {
     icon: "🤖",
     title: "AI 解析",
-    description: "3 秒即時解析",
+    description: "7 秒即時解析",
     detail: "AI 辨識截圖內容，自動抓取生字、生成翻譯和例句",
     color: "bg-sun-light text-sun",
     ringColor: "ring-sun/30",

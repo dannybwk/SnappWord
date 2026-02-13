@@ -91,5 +91,5 @@ async def reply_loading(reply_token: str) -> None:
     """Reply with a 'processing' indicator message."""
     await reply_text(
         reply_token,
-        "🔍 AI 正在解析您的截圖...\n請稍候 3-5 秒，單字卡馬上就來！",
+        "🔍 SnappWord AI 正在解析您的截圖...\n請稍候幾秒，單字卡馬上就來！",
     )

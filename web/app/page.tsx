@@ -74,7 +74,7 @@ const howToJsonLd = {
     {
       "@type": "HowToStep",
       name: "AI 解析",
-      text: "AI 在 3 秒內辨識截圖內容，自動抓取生字、生成翻譯和例句。",
+      text: "AI 在 7 秒內辨識截圖內容，自動抓取生字、生成翻譯和例句。",
     },
     {
       "@type": "HowToStep",

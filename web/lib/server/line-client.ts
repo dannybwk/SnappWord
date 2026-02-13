@@ -96,6 +96,6 @@ export async function getUserProfile(
 export async function replyLoading(replyToken: string): Promise<void> {
   await replyText(
     replyToken,
-    "🔍 SnappWord AI 正在解析您的截圖...\n請稍候 3-5 秒，單字卡馬上就來！"
+    "🔍 SnappWord AI 正在解析您的截圖...\n請稍候幾秒，單字卡馬上就來！"
   );
 }

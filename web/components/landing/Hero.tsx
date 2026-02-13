@@ -162,7 +162,7 @@ export default function Hero() {
             className="text-lg text-earth-light max-w-lg leading-relaxed"
           >
             手機截圖 → 轉傳到LINE帳號 → AI 解析 → 精美單字卡，
-            <span className="font-semibold text-earth">3 秒搞定</span>
+            <span className="font-semibold text-earth">7 秒搞定</span>
           </motion.p>
 
           {/* CTAs */}

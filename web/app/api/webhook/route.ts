@@ -248,7 +248,7 @@ async function handleTextCommand(
       "📸 使用方式：\n\n" +
         "1. 在任何 App 截圖（Duolingo、Netflix、文章...）\n" +
         "2. 把截圖傳給我\n" +
-        "3. 3-5 秒內收到精美單字卡！\n\n" +
+        "3. 幾秒內收到精美單字卡！\n\n" +
         "就是這麼簡單 ✨"
     );
   } else {

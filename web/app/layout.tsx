@@ -55,7 +55,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "SnappWord 截詞 — 截圖變單字卡，AI 幫你記憶整理",
     description:
-      "用 LINE 傳送截圖，AI 自動辨識並生成精美單字卡。3 秒搞定，支援 6 種語言。",
+      "用 LINE 傳送截圖，AI 自動辨識並生成精美單字卡。7 秒搞定，支援 6 種語言。",
     url: "https://snappword.com",
     siteName: "SnappWord 截詞",
     images: [
@@ -73,7 +73,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "SnappWord 截詞 — 截圖變單字卡，AI 幫你記憶整理",
     description:
-      "用 LINE 傳送截圖，AI 自動辨識並生成精美單字卡。3 秒搞定，支援 6 種語言。",
+      "用 LINE 傳送截圖，AI 自動辨識並生成精美單字卡。7 秒搞定，支援 6 種語言。",
     images: ["/image/SnappWord OG.png"],
   },
   alternates: {
