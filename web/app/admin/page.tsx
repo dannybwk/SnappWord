@@ -6,6 +6,7 @@ import KpiCards from "@/components/admin/KpiCards";
 import RevenueCards from "@/components/admin/RevenueCards";
 import ExpiringUsersTable from "@/components/admin/ExpiringUsersTable";
 import RetentionCards from "@/components/admin/RetentionCards";
+import CostCards from "@/components/admin/CostCards";
 import { UserGrowthChart, DailyCardsChart, ErrorRateChart } from "@/components/admin/TimeSeriesCharts";
 import DistributionCharts from "@/components/admin/DistributionCharts";
 import AdminTables from "@/components/admin/AdminTables";
@@ -53,6 +54,16 @@ interface StatsData {
     d1: { rate: number; retained: number; eligible: number };
     d7: { rate: number; retained: number; eligible: number };
     d30: { rate: number; retained: number; eligible: number };
+  };
+  apiCost: {
+    todayCost: number;
+    monthlyCost: number;
+    totalCost: number;
+    todayTokens: number;
+    monthlyTokens: number;
+    totalTokens: number;
+    totalCalls: number;
+    avgTokensPerCall: number;
   };
 }
 
@@ -151,6 +162,11 @@ export default function AdminPage() {
           <section>
             <h2 className="font-heading font-bold text-lg text-earth mb-3">留存率</h2>
             <RetentionCards data={data.retention} />
+          </section>
+
+          <section>
+            <h2 className="font-heading font-bold text-lg text-earth mb-3">AI API 成本</h2>
+            <CostCards data={data.apiCost} />
           </section>
 
           <section>

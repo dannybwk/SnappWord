@@ -21,6 +21,8 @@ function extractToken(authHeader: string | null): string | null {
 }
 
 const TIER_PRICES: Record<string, number> = { sprout: 99, bloom: 249 };
+// Gemini 1.5 Flash blended rate (image-heavy input + JSON output) in USD per token
+const GEMINI_COST_PER_TOKEN = 0.15 / 1_000_000;
 
 export async function GET(request: NextRequest) {
   // Verify Supabase token + email whitelist
@@ -70,6 +72,10 @@ export async function GET(request: NextRequest) {
     expiringUsersRaw,
     usersRegistered30dAgo,
     allImageEvents,
+    // Cost queries
+    todayTokens,
+    monthTokens,
+    allTokens,
   ] = await Promise.all([
     // KPIs
     sb.from("users").select("*", { count: "exact", head: true }),
@@ -108,6 +114,12 @@ export async function GET(request: NextRequest) {
     sb.from("users").select("line_user_id, created_at").lte("created_at", thirtyDaysAgo),
     // All image_received events for retention calculation
     sb.from("api_logs").select("user_id, created_at").eq("event_type", "image_received"),
+    // Cost: token usage today
+    sb.from("api_logs").select("token_count").eq("event_type", "gemini_call").gte("created_at", todayStart).not("token_count", "is", null),
+    // Cost: token usage this month
+    sb.from("api_logs").select("token_count").eq("event_type", "gemini_call").gte("created_at", monthStart).not("token_count", "is", null),
+    // Cost: token usage all-time
+    sb.from("api_logs").select("token_count").eq("event_type", "gemini_call").not("token_count", "is", null),
   ]);
 
   // Compute average latency
@@ -237,6 +249,20 @@ export async function GET(request: NextRequest) {
     30
   );
 
+  // Cost computation
+  function sumTokens(rows: { token_count: number }[] | null): number {
+    return (rows || []).reduce((sum, r) => sum + (r.token_count || 0), 0);
+  }
+  function tokensToCost(tokens: number): number {
+    return Math.round(tokens * GEMINI_COST_PER_TOKEN * 10000) / 10000;
+  }
+
+  const todayTokenTotal = sumTokens(todayTokens.data as { token_count: number }[] | null);
+  const monthTokenTotal = sumTokens(monthTokens.data as { token_count: number }[] | null);
+  const allTokenTotal = sumTokens(allTokens.data as { token_count: number }[] | null);
+  const allCallCount = (allTokens.data || []).length;
+  const avgTokensPerCall = allCallCount > 0 ? Math.round(allTokenTotal / allCallCount) : 0;
+
   // Aggregate distributions
   function countField(rows: Record<string, string>[] | null, field: string): { name: string; value: number }[] {
     const counts: Record<string, number> = {};
@@ -284,6 +310,16 @@ export async function GET(request: NextRequest) {
       d1: retentionD1,
       d7: retentionD7,
       d30: retentionD30,
+    },
+    apiCost: {
+      todayCost: tokensToCost(todayTokenTotal),
+      monthlyCost: tokensToCost(monthTokenTotal),
+      totalCost: tokensToCost(allTokenTotal),
+      todayTokens: todayTokenTotal,
+      monthlyTokens: monthTokenTotal,
+      totalTokens: allTokenTotal,
+      totalCalls: allCallCount,
+      avgTokensPerCall,
     },
   });
 }
