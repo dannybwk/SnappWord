@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { pricingPlans, paymentInfo, lineAddFriendUrl } from "@/lib/constants";
+import { pricingPlans, paymentInfo } from "@/lib/constants";
 import Nav from "@/components/ui/Nav";
 import Footer from "@/components/ui/Footer";
 import Button from "@/components/ui/Button";
@@ -177,8 +177,8 @@ function PaymentModal({
         <div className="mt-6 p-4 rounded-2xl bg-cloud/80 text-sm text-earth-light space-y-1.5">
           <p className="font-medium text-earth">付款後請：</p>
           <p>1. 截圖付款成功畫面</p>
-          <p>2. 在 LINE 搜尋 <a href={lineAddFriendUrl} target="_blank" rel="noopener noreferrer" className="font-bold text-seed underline">{paymentInfo.contactLine}</a></p>
-          <p>3. 傳送截圖給我們，我們會在 24 小時內為你升級</p>
+          <p>2. 回到 SnappWord LINE 官方帳號，輸入「<span className="font-bold text-seed">升級</span>」並傳送付款截圖</p>
+          <p>3. 我們會在 24 小時內為你升級</p>
         </div>
 
         {/* Close */}
