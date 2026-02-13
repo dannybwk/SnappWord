@@ -21,8 +21,9 @@ function extractToken(authHeader: string | null): string | null {
 }
 
 const TIER_PRICES: Record<string, number> = { sprout: 99, bloom: 249 };
-// Gemini 1.5 Flash blended rate (image-heavy input + JSON output) in USD per token
-const GEMINI_COST_PER_TOKEN = 0.15 / 1_000_000;
+// Gemini 2.0 Flash blended rate: $0.10/1M input, $0.40/1M output
+// ~80% input / 20% output for image screenshots → $0.16/1M tokens
+const GEMINI_COST_PER_TOKEN = 0.16 / 1_000_000;
 
 export async function GET(request: NextRequest) {
   // Verify Supabase token + email whitelist

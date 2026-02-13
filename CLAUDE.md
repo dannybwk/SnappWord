@@ -1,14 +1,14 @@
 # SnappWord 截詞 — Development Guide
 
 ## Project Overview
-SnappWord is a LINE Bot that converts language-learning screenshots into structured vocabulary cards using AI (Gemini 1.5 Flash). Users send screenshots from apps like Duolingo, Netflix, or any reading material, and receive beautiful Flex Message flashcards in return.
+SnappWord is a LINE Bot that converts language-learning screenshots into structured vocabulary cards using AI (Gemini 2.0 Flash). Users send screenshots from apps like Duolingo, Netflix, or any reading material, and receive beautiful Flex Message flashcards in return.
 
 ## Tech Stack
 - **Runtime:** Python 3.11+ on Vercel Serverless Functions
 - **Framework:** FastAPI (ASGI)
 - **Database:** Supabase (PostgreSQL)
 - **Storage:** Supabase Storage (Bucket: `user_screenshots`)
-- **AI Engine:** Google Gemini 1.5 Flash (Multimodal)
+- **AI Engine:** Google Gemini 2.0 Flash (Multimodal)
 - **Messaging:** LINE Messaging API (Webhook + Flex Message)
 
 ## Project Structure

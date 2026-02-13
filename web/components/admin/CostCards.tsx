@@ -54,7 +54,7 @@ const costConfig: {
     label: "平均每次",
     icon: "⚙️",
     color: "text-sky",
-    getValue: (d) => formatCost(d.avgTokensPerCall * 0.15 / 1_000_000),
+    getValue: (d) => formatCost(d.avgTokensPerCall * 0.16 / 1_000_000),
     getSub: (d) => `${formatTokens(d.avgTokensPerCall)} tokens/call`,
   },
 ];
