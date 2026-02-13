@@ -56,9 +56,18 @@ interface StatsData {
   };
 }
 
+const TABS = [
+  { key: "overview", label: "總覽", icon: "📊" },
+  { key: "users", label: "用戶", icon: "👥" },
+  { key: "analytics", label: "分析", icon: "📈" },
+] as const;
+
+type TabKey = (typeof TABS)[number]["key"];
+
 export default function AdminPage() {
   const [data, setData] = useState<StatsData | null>(null);
   const [error, setError] = useState("");
+  const [tab, setTab] = useState<TabKey>("overview");
 
   useEffect(() => {
     async function load() {
@@ -109,69 +118,91 @@ export default function AdminPage() {
         <p className="text-earth-light text-sm mt-1">SnappWord 管理後台總覽</p>
       </div>
 
-      {/* KPI Cards */}
-      <section>
-        <KpiCards data={data.kpis} />
-      </section>
+      {/* Tabs */}
+      <div className="flex gap-1 bg-cloud/60 rounded-xl p-1">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+              tab === t.key
+                ? "bg-white text-earth shadow-sm"
+                : "text-earth-light hover:text-earth"
+            }`}
+          >
+            <span className="text-base">{t.icon}</span>
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-      {/* Revenue */}
-      <section>
-        <h2 className="font-heading font-bold text-lg text-earth mb-3">營收總覽</h2>
-        <RevenueCards data={data.revenue} />
-      </section>
+      {/* Tab Content */}
+      {tab === "overview" && (
+        <div className="space-y-6">
+          <section>
+            <KpiCards data={data.kpis} />
+          </section>
 
-      {/* Expiring Users */}
-      <section>
-        <h2 className="font-heading font-bold text-lg text-earth mb-3">即將到期用戶</h2>
-        <ExpiringUsersTable users={data.expiringUsers} />
-      </section>
+          <section>
+            <h2 className="font-heading font-bold text-lg text-earth mb-3">營收總覽</h2>
+            <RevenueCards data={data.revenue} />
+          </section>
 
-      {/* Retention */}
-      <section>
-        <h2 className="font-heading font-bold text-lg text-earth mb-3">留存率</h2>
-        <RetentionCards data={data.retention} />
-      </section>
+          <section>
+            <h2 className="font-heading font-bold text-lg text-earth mb-3">留存率</h2>
+            <RetentionCards data={data.retention} />
+          </section>
 
-      {/* User Management */}
-      <section>
-        <h2 className="font-heading font-bold text-lg text-earth mb-3">用戶管理</h2>
-        <UserManagement />
-      </section>
-
-      {/* Upgrade Requests */}
-      <section>
-        <h2 className="font-heading font-bold text-lg text-earth mb-3">升級申請</h2>
-        <UpgradeRequests />
-      </section>
-
-      {/* Time Series */}
-      <section>
-        <h2 className="font-heading font-bold text-lg text-earth mb-3">趨勢</h2>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <UserGrowthChart data={data.timeSeries.dailyUsers} />
-          <DailyCardsChart data={data.timeSeries.dailyCards} />
-          <ErrorRateChart data={data.timeSeries.dailyErrorRate} />
+          <section>
+            <h2 className="font-heading font-bold text-lg text-earth mb-3">即將到期用戶</h2>
+            <ExpiringUsersTable users={data.expiringUsers} />
+          </section>
         </div>
-      </section>
+      )}
 
-      {/* Distributions */}
-      <section>
-        <h2 className="font-heading font-bold text-lg text-earth mb-3">分佈</h2>
-        <DistributionCharts
-          languages={data.distributions.languages}
-          sourceApps={data.distributions.sourceApps}
-          tiers={data.distributions.tiers}
-        />
-      </section>
+      {tab === "users" && (
+        <div className="space-y-6">
+          <section>
+            <h2 className="font-heading font-bold text-lg text-earth mb-3">用戶管理</h2>
+            <UserManagement />
+          </section>
 
-      {/* Tables */}
-      <section>
-        <h2 className="font-heading font-bold text-lg text-earth mb-3">資料</h2>
-        <AdminTables
-          recentUsers={data.tables.recentUsers}
-          recentErrors={data.tables.recentErrors}
-        />
-      </section>
+          <section>
+            <h2 className="font-heading font-bold text-lg text-earth mb-3">升級申請</h2>
+            <UpgradeRequests />
+          </section>
+        </div>
+      )}
+
+      {tab === "analytics" && (
+        <div className="space-y-6">
+          <section>
+            <h2 className="font-heading font-bold text-lg text-earth mb-3">趨勢</h2>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <UserGrowthChart data={data.timeSeries.dailyUsers} />
+              <DailyCardsChart data={data.timeSeries.dailyCards} />
+              <ErrorRateChart data={data.timeSeries.dailyErrorRate} />
+            </div>
+          </section>
+
+          <section>
+            <h2 className="font-heading font-bold text-lg text-earth mb-3">分佈</h2>
+            <DistributionCharts
+              languages={data.distributions.languages}
+              sourceApps={data.distributions.sourceApps}
+              tiers={data.distributions.tiers}
+            />
+          </section>
+
+          <section>
+            <h2 className="font-heading font-bold text-lg text-earth mb-3">資料</h2>
+            <AdminTables
+              recentUsers={data.tables.recentUsers}
+              recentErrors={data.tables.recentErrors}
+            />
+          </section>
+        </div>
+      )}
     </div>
   );
 }
