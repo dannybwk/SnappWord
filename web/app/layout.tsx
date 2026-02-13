@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Nunito, Inter, Noto_Sans_TC, JetBrains_Mono, Caveat } from "next/font/google";
 import "./globals.css";
+
+const GA_ID = "G-KXSD2F2FT1";
 
 const nunito = Nunito({
   variable: "--font-nunito",
@@ -88,6 +91,20 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-TW">
+      <head>
+        <Script
+          src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
+          strategy="afterInteractive"
+        />
+        <Script id="gtag-init" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', '${GA_ID}');
+          `}
+        </Script>
+      </head>
       <body
         className={`
           ${nunito.variable} ${inter.variable} ${notoSansTC.variable}
