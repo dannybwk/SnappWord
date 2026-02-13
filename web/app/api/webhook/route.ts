@@ -280,7 +280,7 @@ async function handlePostback(event: LineEvent): Promise<void> {
     await updateCardStatusWithOwner(cardId, user.id, 1); // 1 = Learning
     await replyText(
       replyToken,
-      "🔁 已加入複習清單！之後會推播提醒你複習 📚"
+      "🔁 已加入複習清單！之後會推播提醒你複習 📚\n到 snappword.com/dashboard 查看你的完整筆記本 ✨"
     );
   }
 }
