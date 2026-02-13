@@ -115,6 +115,30 @@ export async function updateCardStatus(
   await sb.from("vocab_cards").update(update).eq("id", cardId);
 }
 
+/** Update review_status with ownership verification. Returns true if card was updated. */
+export async function updateCardStatusWithOwner(
+  cardId: string,
+  userId: string,
+  status: number
+): Promise<boolean> {
+  const sb = getClient();
+  const now = new Date();
+  const update: Record<string, unknown> = {
+    review_status: status,
+    updated_at: now.toISOString(),
+  };
+  if (status === 1) {
+    update.next_review_at = new Date(now.getTime() + SRS_INTERVALS[0] * 86400000).toISOString();
+  }
+  const { data } = await sb
+    .from("vocab_cards")
+    .update(update)
+    .eq("id", cardId)
+    .eq("user_id", userId)
+    .select("id");
+  return (data?.length ?? 0) > 0;
+}
+
 // ── Quota & Rate Limiting ──
 
 /** Tier limits: screenshots per month. */

@@ -15,10 +15,21 @@ function getServiceClient() {
   );
 }
 
+function extractToken(authHeader: string | null): string | null {
+  if (!authHeader?.startsWith("Bearer ")) return null;
+  return authHeader.slice(7);
+}
+
 /** POST — Check if email is in whitelist */
 export async function POST(request: NextRequest) {
-  const body = await request.json().catch(() => ({}));
-  const email = (body.email || "").trim().toLowerCase();
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const email = (typeof body.email === "string" ? body.email : "").trim().toLowerCase();
 
   if (!email) {
     return NextResponse.json({ error: "Email required" }, { status: 400 });
@@ -38,8 +49,7 @@ export async function POST(request: NextRequest) {
 
 /** GET — Verify Supabase token + email whitelist */
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  const token = authHeader?.replace("Bearer ", "");
+  const token = extractToken(request.headers.get("authorization"));
 
   if (!token) {
     return NextResponse.json({ authenticated: false }, { status: 401 });

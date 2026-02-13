@@ -16,10 +16,13 @@ function getClient() {
   );
 }
 
-async function verifyAdmin(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  const token = authHeader?.replace("Bearer ", "");
+function extractToken(authHeader: string | null): string | null {
+  if (!authHeader?.startsWith("Bearer ")) return null;
+  return authHeader.slice(7);
+}
 
+async function verifyAdmin(request: NextRequest): Promise<string | false> {
+  const token = extractToken(request.headers.get("authorization"));
   if (!token) return false;
 
   const sb = getClient();
@@ -29,7 +32,7 @@ async function verifyAdmin(request: NextRequest) {
     return false;
   }
 
-  return true;
+  return user.email;
 }
 
 /** GET /api/admin/users?q=keyword — search users */
@@ -39,7 +42,7 @@ export async function GET(request: NextRequest) {
   }
 
   const q = request.nextUrl.searchParams.get("q") || "";
-  if (!q.trim()) {
+  if (!q.trim() || q.length > 100) {
     return NextResponse.json({ users: [] });
   }
 
@@ -62,7 +65,8 @@ export async function GET(request: NextRequest) {
 
 /** PATCH /api/admin/users — update user tier */
 export async function PATCH(request: NextRequest) {
-  if (!(await verifyAdmin(request))) {
+  const adminEmail = await verifyAdmin(request);
+  if (!adminEmail) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -80,6 +84,15 @@ export async function PATCH(request: NextRequest) {
 
   try {
     await updateUserTier(userId, tier);
+
+    // Audit log
+    const sb = getClient();
+    await sb.from("api_logs").insert({
+      user_id: userId,
+      event_type: "admin_tier_change",
+      payload: { tier, admin_email: adminEmail },
+    });
+
     return NextResponse.json({ success: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import time
 
 from google import genai
 from google.genai import types
+from pydantic import ValidationError
 
 from . import config
 from .models import GeminiParseResult
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are SnappWord, a language learning assistant that analyzes screenshots.
 
@@ -49,18 +53,26 @@ If the image contains NO recognizable language learning content, return:
 {"source_app": "General", "target_lang": "en", "source_lang": "zh-TW", "words": []}
 """
 
+ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
+
 
 def _get_client() -> genai.Client:
     return genai.Client(api_key=config.GEMINI_API_KEY)
 
 
-def analyze_screenshot(image_bytes: bytes, mime_type: str = "image/jpeg") -> tuple[GeminiParseResult, dict]:
+def analyze_screenshot(
+    image_bytes: bytes,
+    mime_type: str = "image/jpeg",
+) -> tuple[GeminiParseResult, dict]:
     """
     Send screenshot to Gemini for analysis.
 
     Returns:
         (parsed_result, metadata) where metadata contains latency_ms and token_count
     """
+    if mime_type not in ALLOWED_MIME_TYPES:
+        mime_type = "image/jpeg"
+
     client = _get_client()
 
     start = time.time()
@@ -79,9 +91,9 @@ def analyze_screenshot(image_bytes: bytes, mime_type: str = "image/jpeg") -> tup
     )
     latency_ms = int((time.time() - start) * 1000)
 
-    metadata = {
+    metadata: dict = {
         "latency_ms": latency_ms,
-        "token_count": getattr(response.usage_metadata, "total_token_count", None),
+        "token_count": getattr(response.usage_metadata, "total_token_count", 0),
     }
 
     raw_text = response.text
@@ -95,26 +107,27 @@ def _parse_response(raw: str) -> GeminiParseResult:
     try:
         data = json.loads(raw)
         return GeminiParseResult(**data)
-    except (json.JSONDecodeError, Exception):
-        pass
+    except (json.JSONDecodeError, ValidationError):
+        logger.debug("Direct JSON parse failed, trying fallback")
 
     # Attempt 2: extract JSON block from markdown fences
-    match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw, re.DOTALL)
+    match = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", raw)
     if match:
         try:
             data = json.loads(match.group(1))
             return GeminiParseResult(**data)
-        except (json.JSONDecodeError, Exception):
-            pass
+        except (json.JSONDecodeError, ValidationError):
+            logger.debug("Markdown fence parse failed, trying fallback")
 
-    # Attempt 3: find first { ... } block
-    match = re.search(r"\{.*\}", raw, re.DOTALL)
+    # Attempt 3: find first { ... } block (greedy to handle nested objects)
+    match = re.search(r"\{[\s\S]*\}", raw)
     if match:
         try:
             data = json.loads(match.group(0))
             return GeminiParseResult(**data)
-        except (json.JSONDecodeError, Exception):
-            pass
+        except (json.JSONDecodeError, ValidationError):
+            logger.debug("Regex JSON extract failed")
 
     # All attempts failed
+    logger.warning("All Gemini response parsing attempts failed")
     return GeminiParseResult(words=[])

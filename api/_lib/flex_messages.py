@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from . import config
 from .models import ParsedWord
 
 BRAND_COLOR = config.BRAND_COLOR
+MAX_TAGS_PER_CARD = 2
+MAX_CAROUSEL_BUBBLES = 10
 
 
 def build_vocab_card(
     word: ParsedWord,
     card_id: str,
     source_app: str = "General",
-) -> dict:
+) -> dict[str, Any]:
     """Build a single Flex Message bubble for a vocabulary word."""
     # Header: word + pronunciation
     header = {
@@ -39,7 +43,7 @@ def build_vocab_card(
     }
 
     # Body: context sentence + translation + tags
-    body_contents = []
+    body_contents: list[dict[str, Any]] = []
 
     if word.context_sentence:
         body_contents.append({
@@ -50,14 +54,15 @@ def build_vocab_card(
             "color": "#333333",
         })
 
-    body_contents.append({
-        "type": "text",
-        "text": f"🇹🇼 {word.translation}" if word.translation else " ",
-        "size": "md",
-        "wrap": True,
-        "color": "#555555",
-        "margin": "md",
-    })
+    if word.translation:
+        body_contents.append({
+            "type": "text",
+            "text": f"🇹🇼 {word.translation}",
+            "size": "md",
+            "wrap": True,
+            "color": "#555555",
+            "margin": "md",
+        })
 
     if word.context_trans:
         body_contents.append({
@@ -89,28 +94,33 @@ def build_vocab_card(
             },
         ])
 
-    # Tags row
-    tag_labels = [source_app] + word.tags[:2]
+    # Tags row — deduplicate source_app from word.tags
+    seen: set[str] = set()
+    tag_labels: list[str] = []
+    for tag in [source_app] + word.tags[:MAX_TAGS_PER_CARD]:
+        if tag and tag not in seen:
+            seen.add(tag)
+            tag_labels.append(tag)
+
     tag_contents = []
     for tag in tag_labels:
-        if tag:
-            tag_contents.append({
-                "type": "box",
-                "layout": "horizontal",
-                "backgroundColor": "#F0F0F0",
-                "cornerRadius": "8px",
-                "paddingAll": "4px",
-                "paddingStart": "8px",
-                "paddingEnd": "8px",
-                "contents": [
-                    {
-                        "type": "text",
-                        "text": f"🏷 {tag}",
-                        "size": "xxs",
-                        "color": "#888888",
-                    }
-                ],
-            })
+        tag_contents.append({
+            "type": "box",
+            "layout": "horizontal",
+            "backgroundColor": "#F0F0F0",
+            "cornerRadius": "8px",
+            "paddingAll": "4px",
+            "paddingStart": "8px",
+            "paddingEnd": "8px",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": f"🏷 {tag}",
+                    "size": "xxs",
+                    "color": "#888888",
+                }
+            ],
+        })
     if tag_contents:
         body_contents.append({
             "type": "box",
@@ -173,7 +183,7 @@ def build_vocab_card(
 def build_vocab_carousel(
     words: list[tuple[ParsedWord, str]],
     source_app: str = "General",
-) -> dict:
+) -> dict[str, Any]:
     """
     Build a Flex Message carousel for multiple words.
 
@@ -183,7 +193,7 @@ def build_vocab_carousel(
     """
     bubbles = [
         build_vocab_card(word, card_id, source_app)
-        for word, card_id in words[:10]  # LINE max 12 bubbles
+        for word, card_id in words[:MAX_CAROUSEL_BUBBLES]
     ]
 
     if len(bubbles) == 1:
@@ -203,7 +213,7 @@ def build_vocab_carousel(
     }
 
 
-def build_error_message(text: str) -> dict:
+def build_error_message(text: str) -> dict[str, Any]:
     """Build a simple error/info Flex Message."""
     return {
         "type": "flex",
@@ -234,12 +244,4 @@ def build_error_message(text: str) -> dict:
                 ],
             },
         },
-    }
-
-
-def build_save_confirmation() -> dict:
-    """Build confirmation message after saving a word."""
-    return {
-        "type": "text",
-        "text": "✅ 已存入你的單字本！明天早上會推播複習提醒喔 📚",
     }

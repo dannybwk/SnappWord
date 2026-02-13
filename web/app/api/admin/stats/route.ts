@@ -15,10 +15,14 @@ function getClient() {
   );
 }
 
+function extractToken(authHeader: string | null): string | null {
+  if (!authHeader?.startsWith("Bearer ")) return null;
+  return authHeader.slice(7);
+}
+
 export async function GET(request: NextRequest) {
   // Verify Supabase token + email whitelist
-  const authHeader = request.headers.get("authorization");
-  const token = authHeader?.replace("Bearer ", "");
+  const token = extractToken(request.headers.get("authorization"));
 
   if (!token) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

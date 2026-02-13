@@ -38,11 +38,14 @@ export async function replyMessage(
   replyToken: string,
   messages: Record<string, unknown>[]
 ): Promise<void> {
-  await fetch(`${LINE_API_BASE}/message/reply`, {
+  const resp = await fetch(`${LINE_API_BASE}/message/reply`, {
     method: "POST",
     headers: headers(),
     body: JSON.stringify({ replyToken, messages }),
   });
+  if (!resp.ok) {
+    console.error(`LINE reply failed: ${resp.status} ${await resp.text()}`);
+  }
 }
 
 /** Send push message to a user (no time limit). */
@@ -50,11 +53,14 @@ export async function pushMessage(
   userId: string,
   messages: Record<string, unknown>[]
 ): Promise<void> {
-  await fetch(`${LINE_API_BASE}/message/push`, {
+  const resp = await fetch(`${LINE_API_BASE}/message/push`, {
     method: "POST",
     headers: headers(),
     body: JSON.stringify({ to: userId, messages }),
   });
+  if (!resp.ok) {
+    console.error(`LINE push failed: ${resp.status} ${await resp.text()}`);
+  }
 }
 
 /** Download image content from LINE servers. */

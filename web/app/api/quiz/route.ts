@@ -1,15 +1,23 @@
 /**
  * GET  /api/quiz?userId=UUID  → quiz questions from due cards
- * POST /api/quiz              → submit answer { cardId, correct }
+ * POST /api/quiz              → submit answer { userId, cardId, correct }
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import {
   getDueCards,
   getAllCardTranslations,
   advanceCardSRS,
   resetCardSRS,
 } from "@/lib/server/supabase-server";
+
+function getClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+    process.env.SUPABASE_SERVICE_ROLE_KEY || ""
+  );
+}
 
 function shuffleArray<T>(arr: T[]): T[] {
   const shuffled = [...arr];
@@ -90,13 +98,26 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const { cardId, correct } = body;
+  const { userId, cardId, correct } = body;
 
-  if (!cardId || typeof correct !== "boolean") {
+  if (!userId || !cardId || typeof correct !== "boolean") {
     return NextResponse.json(
-      { error: "Missing cardId or correct" },
+      { error: "Missing userId, cardId, or correct" },
       { status: 400 }
     );
+  }
+
+  // Verify card belongs to the user before updating SRS
+  const sb = getClient();
+  const { data: card } = await sb
+    .from("vocab_cards")
+    .select("id")
+    .eq("id", cardId)
+    .eq("user_id", userId)
+    .single();
+
+  if (!card) {
+    return NextResponse.json({ error: "Card not found" }, { status: 404 });
   }
 
   if (correct) {

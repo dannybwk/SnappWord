@@ -30,7 +30,7 @@ import {
   checkQuota,
   uploadImage,
   saveVocabCards,
-  updateCardStatus,
+  updateCardStatusWithOwner,
   logEvent,
 } from "@/lib/server/supabase-server";
 import { buildVocabCarousel, buildErrorMessage } from "@/lib/server/flex-messages";
@@ -260,10 +260,16 @@ async function handleTextCommand(
 async function handlePostback(event: LineEvent): Promise<void> {
   const dataStr = event.postback?.data || "";
   const replyToken = event.replyToken || "";
+  const lineUserId = event.source.userId;
   const params = new URLSearchParams(dataStr);
 
   const action = params.get("action") || "";
   const cardId = params.get("card_id") || "";
+
+  if (!cardId) return;
+
+  // Look up user for ownership verification
+  const user = await getOrCreateUser(lineUserId);
 
   if (action === "save" && cardId) {
     await replyText(
@@ -271,7 +277,7 @@ async function handlePostback(event: LineEvent): Promise<void> {
       "📖 已存入單字筆記！\n到 snappword.com/dashboard 查看你的完整筆記本 ✨"
     );
   } else if (action === "review" && cardId) {
-    await updateCardStatus(cardId, 1); // 1 = Learning
+    await updateCardStatusWithOwner(cardId, user.id, 1); // 1 = Learning
     await replyText(
       replyToken,
       "🔁 已加入複習清單！之後會推播提醒你複習 📚"

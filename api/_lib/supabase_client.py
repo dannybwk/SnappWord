@@ -2,13 +2,30 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 
 from supabase import create_client, Client
 
 from . import config
-from .models import GeminiParseResult, ParsedWord
+from .models import GeminiParseResult, ReviewStatus
+
+logger = logging.getLogger(__name__)
+
+# Tier limits: screenshots per month
+MONTHLY_LIMITS: dict[str, float] = {
+    "free": 30,
+    "sprout": 200,
+    "bloom": float("inf"),
+}
+
+# Daily caps (anti-abuse for unlimited tiers)
+DAILY_LIMITS: dict[str, float] = {
+    "free": float("inf"),
+    "sprout": float("inf"),
+    "bloom": 500,
+}
 
 
 def _get_client() -> Client:
@@ -28,11 +45,79 @@ def get_or_create_user(line_user_id: str, display_name: str | None = None) -> di
         "display_name": display_name or "",
     }
     result = sb.table("users").insert(new_user).execute()
+    if not result.data:
+        raise RuntimeError(f"Failed to create user for {line_user_id}")
     return result.data[0]
+
+
+def check_quota(user: dict) -> dict:
+    """Check if user can send another screenshot (daily + monthly quota).
+
+    Returns dict with keys: allowed, reason, tier, monthly_used, monthly_limit.
+    """
+    sb = _get_client()
+    tier = user.get("subscription_tier") or "free"
+    if tier == "free" and user.get("is_premium"):
+        tier = "sprout"
+
+    monthly_limit = MONTHLY_LIMITS.get(tier, MONTHLY_LIMITS["free"])
+    daily_limit = DAILY_LIMITS.get(tier, float("inf"))
+    user_id = user["id"]
+
+    # Daily quota check
+    if daily_limit != float("inf"):
+        day_start = datetime.now(timezone.utc).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        result = (
+            sb.table("api_logs")
+            .select("*", count="exact", head=True)
+            .eq("user_id", user_id)
+            .eq("event_type", "image_received")
+            .gte("created_at", day_start.isoformat())
+            .execute()
+        )
+        daily_count = result.count or 0
+        if daily_count >= daily_limit:
+            return {
+                "allowed": False,
+                "reason": "daily_quota",
+                "tier": tier,
+                "monthly_used": 0,
+                "monthly_limit": monthly_limit,
+            }
+
+    # Monthly quota check
+    if monthly_limit != float("inf"):
+        now = datetime.now(timezone.utc)
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        result = (
+            sb.table("api_logs")
+            .select("*", count="exact", head=True)
+            .eq("user_id", user_id)
+            .eq("event_type", "image_received")
+            .gte("created_at", month_start.isoformat())
+            .execute()
+        )
+        used = result.count or 0
+        if used >= monthly_limit:
+            return {
+                "allowed": False,
+                "reason": "monthly_quota",
+                "tier": tier,
+                "monthly_used": used,
+                "monthly_limit": monthly_limit,
+            }
+        return {"allowed": True, "tier": tier, "monthly_used": used, "monthly_limit": monthly_limit}
+
+    return {"allowed": True, "tier": tier, "monthly_used": 0, "monthly_limit": monthly_limit}
 
 
 def upload_image(image_bytes: bytes, user_id: str) -> str:
     """Upload screenshot to Supabase Storage. Returns public URL."""
+    if len(image_bytes) > 5_242_880:  # 5 MB
+        raise ValueError("Image too large (max 5 MB)")
+
     sb = _get_client()
     filename = f"{user_id}/{uuid.uuid4().hex}.jpg"
     sb.storage.from_(config.STORAGE_BUCKET).upload(
@@ -62,23 +147,35 @@ def save_vocab_cards(
             "source_app": parse_result.source_app,
             "target_lang": parse_result.target_lang,
             "tags": w.tags,
-            "review_status": 0,
+            "review_status": ReviewStatus.NEW,
         })
 
     if not rows:
         return []
 
     result = sb.table("vocab_cards").insert(rows).execute()
+    if not result.data:
+        raise RuntimeError("Failed to save vocab cards")
     return result.data
 
 
-def update_card_status(card_id: str, status: int) -> None:
-    """Update review_status of a vocab card."""
+def update_card_status(card_id: str, user_id: str, status: int) -> bool:
+    """Update review_status of a vocab card. Verifies ownership.
+
+    Returns True if the card was found and updated, False otherwise.
+    """
     sb = _get_client()
-    sb.table("vocab_cards").update({
-        "review_status": status,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }).eq("id", card_id).execute()
+    result = (
+        sb.table("vocab_cards")
+        .update({
+            "review_status": status,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        .eq("id", card_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    return bool(result.data)
 
 
 def get_recent_cards(user_id: str, limit: int = 10) -> list[dict]:
@@ -92,16 +189,19 @@ def get_recent_cards(user_id: str, limit: int = 10) -> list[dict]:
         .limit(limit)
         .execute()
     )
-    return result.data
+    return result.data or []
 
 
 def log_event(user_id: str | None, event_type: str, **kwargs) -> None:
     """Write an operational log entry."""
-    sb = _get_client()
-    sb.table("api_logs").insert({
-        "user_id": user_id,
-        "event_type": event_type,
-        "latency_ms": kwargs.get("latency_ms"),
-        "token_count": kwargs.get("token_count"),
-        "payload": kwargs.get("payload"),
-    }).execute()
+    try:
+        sb = _get_client()
+        sb.table("api_logs").insert({
+            "user_id": user_id,
+            "event_type": event_type,
+            "latency_ms": kwargs.get("latency_ms"),
+            "token_count": kwargs.get("token_count"),
+            "payload": kwargs.get("payload"),
+        }).execute()
+    except Exception:
+        logger.exception("Failed to write log event: %s", event_type)

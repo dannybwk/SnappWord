@@ -9,12 +9,13 @@ Architecture: Async reply pattern
 from __future__ import annotations
 
 import asyncio
-import traceback
+import logging
 from urllib.parse import parse_qs
 
 from fastapi import FastAPI, Request, HTTPException
 
 from _lib import config
+from _lib.models import ReviewStatus
 from _lib.line_client import (
     verify_signature,
     reply_loading,
@@ -25,6 +26,7 @@ from _lib.line_client import (
 from _lib.gemini_client import analyze_screenshot
 from _lib.supabase_client import (
     get_or_create_user,
+    check_quota,
     upload_image,
     save_vocab_cards,
     update_card_status,
@@ -33,14 +35,15 @@ from _lib.supabase_client import (
 from _lib.flex_messages import (
     build_vocab_carousel,
     build_error_message,
-    build_save_confirmation,
 )
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
 
 @app.post("/api/webhook")
-async def webhook(request: Request):
+async def webhook(request: Request) -> dict:
     """LINE Webhook endpoint."""
     body = await request.body()
     signature = request.headers.get("X-Line-Signature", "")
@@ -52,8 +55,10 @@ async def webhook(request: Request):
     events = payload.get("events", [])
 
     for event in events:
-        # Fire-and-forget: don't block the webhook response
-        asyncio.ensure_future(_handle_event(event))
+        # Fire-and-forget with timeout: don't block the webhook response
+        asyncio.ensure_future(
+            asyncio.wait_for(_handle_event(event), timeout=300)
+        )
 
     return {"status": "ok"}
 
@@ -67,7 +72,7 @@ async def _handle_event(event: dict) -> None:
         elif event_type == "postback":
             await _handle_postback(event)
     except Exception:
-        traceback.print_exc()
+        logger.exception("Unhandled error in event handler")
 
 
 async def _handle_message(event: dict) -> None:
@@ -75,7 +80,11 @@ async def _handle_message(event: dict) -> None:
     message = event.get("message", {})
     msg_type = message.get("type")
     reply_token = event.get("replyToken", "")
-    line_user_id = event["source"]["userId"]
+    source = event.get("source", {})
+    line_user_id = source.get("userId")
+
+    if not line_user_id:
+        return
 
     if msg_type == "image":
         # Step 1: Immediately reply with loading indicator
@@ -97,24 +106,48 @@ async def _handle_message(event: dict) -> None:
 
 async def _process_screenshot(line_user_id: str, message_id: str) -> None:
     """Full pipeline: download → upload → AI analyze → store → push card."""
-    user = get_or_create_user(line_user_id)
+    user = await asyncio.to_thread(get_or_create_user, line_user_id)
     user_id = user["id"]
 
     try:
+        # Check rate limit & monthly quota before processing
+        quota = await asyncio.to_thread(check_quota, user)
+        if not quota["allowed"]:
+            if quota["reason"] == "daily_quota":
+                await push_message(line_user_id, [
+                    build_error_message(
+                        "📊 今天的截圖解析量已達上限\n"
+                        "明天就會自動重置，請明天再繼續！"
+                    )
+                ])
+            elif quota["reason"] == "monthly_quota":
+                await push_message(line_user_id, [
+                    build_error_message(
+                        f"📊 本月已使用 {quota['monthly_used']}/{int(quota['monthly_limit'])} 張截圖額度\n"
+                        "額度已用完，下個月會自動重置！\n\n"
+                        "💎 升級方案可獲得更多額度：\nsnappword.com/pricing"
+                    )
+                ])
+            return
+
         # Download image from LINE
         image_bytes = await get_message_content(message_id)
 
-        log_event(user_id, "image_received", payload={"message_id": message_id})
+        await asyncio.to_thread(
+            log_event, user_id, "image_received",
+            payload={"message_id": message_id},
+        )
 
         # Upload to Supabase Storage
-        image_url = upload_image(image_bytes, user_id)
+        image_url = await asyncio.to_thread(upload_image, image_bytes, user_id)
 
         # AI analysis
-        parse_result, metadata = analyze_screenshot(image_bytes)
+        parse_result, metadata = await asyncio.to_thread(
+            analyze_screenshot, image_bytes
+        )
 
-        log_event(
-            user_id,
-            "gemini_call",
+        await asyncio.to_thread(
+            log_event, user_id, "gemini_call",
             latency_ms=metadata.get("latency_ms"),
             token_count=metadata.get("token_count"),
             payload={"word_count": len(parse_result.words)},
@@ -130,12 +163,17 @@ async def _process_screenshot(line_user_id: str, message_id: str) -> None:
             return
 
         # Save to database
-        saved_cards = save_vocab_cards(user_id, image_url, parse_result)
+        saved_cards = await asyncio.to_thread(
+            save_vocab_cards, user_id, image_url, parse_result
+        )
 
-        log_event(user_id, "parse_success", payload={
-            "cards_saved": len(saved_cards),
-            "source_app": parse_result.source_app,
-        })
+        await asyncio.to_thread(
+            log_event, user_id, "parse_success",
+            payload={
+                "cards_saved": len(saved_cards),
+                "source_app": parse_result.source_app,
+            },
+        )
 
         # Build and send Flex Message
         word_card_pairs = [
@@ -146,8 +184,11 @@ async def _process_screenshot(line_user_id: str, message_id: str) -> None:
         await push_message(line_user_id, [flex_msg])
 
     except Exception as e:
-        traceback.print_exc()
-        log_event(user_id, "parse_fail", payload={"error": str(e)})
+        logger.exception("Failed to process screenshot for user %s", user_id)
+        await asyncio.to_thread(
+            log_event, user_id, "parse_fail",
+            payload={"error": str(e)},
+        )
         await push_message(line_user_id, [
             build_error_message(
                 "處理截圖時發生錯誤 😅\n請稍後重試，或換一張更清晰的截圖。"
@@ -180,14 +221,28 @@ async def _handle_postback(event: dict) -> None:
     """Handle postback actions from Flex Message buttons."""
     data_str = event.get("postback", {}).get("data", "")
     reply_token = event.get("replyToken", "")
+    source = event.get("source", {})
+    line_user_id = source.get("userId")
     params = parse_qs(data_str)
 
     action = params.get("action", [""])[0]
     card_id = params.get("card_id", [""])[0]
 
+    if not line_user_id or not card_id:
+        return
+
+    # Look up user to get user_id for ownership verification
+    user = await asyncio.to_thread(get_or_create_user, line_user_id)
+    user_id = user["id"]
+
     if action == "save" and card_id:
-        update_card_status(card_id, 1)  # 1 = Learning
-        await reply_text(reply_token, "✅ 已存入你的單字本！明天早上會推播複習提醒喔 📚")
+        updated = await asyncio.to_thread(
+            update_card_status, card_id, user_id, ReviewStatus.LEARNING
+        )
+        if updated:
+            await reply_text(reply_token, "✅ 已存入你的單字本！明天早上會推播複習提醒喔 📚")
+        else:
+            await reply_text(reply_token, "⚠️ 找不到這張單字卡")
 
     elif action == "skip" and card_id:
         await reply_text(reply_token, "⏭ 已跳過")

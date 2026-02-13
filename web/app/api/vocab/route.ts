@@ -1,6 +1,6 @@
 /**
  * GET /api/vocab?userId=UUID        → all cards for user
- * GET /api/vocab?cardId=UUID        → single card by ID
+ * GET /api/vocab?cardId=UUID&userId=UUID → single card (with ownership check)
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -19,25 +19,26 @@ export async function GET(request: NextRequest) {
   const cardId = request.nextUrl.searchParams.get("cardId");
   const sb = getClient();
 
-  // Single card lookup
+  if (!userId) {
+    return NextResponse.json({ error: "Missing userId" }, { status: 400 });
+  }
+
+  // Single card lookup — requires userId for ownership verification
   if (cardId) {
     const { data, error } = await sb
       .from("vocab_cards")
       .select("*")
       .eq("id", cardId)
+      .eq("user_id", userId)
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 404 });
+      return NextResponse.json({ error: "Card not found" }, { status: 404 });
     }
     return NextResponse.json({ card: data });
   }
 
   // All cards for user
-  if (!userId) {
-    return NextResponse.json({ error: "Missing userId or cardId" }, { status: 400 });
-  }
-
   const TIER_LIMITS: Record<string, number> = {
     free: 30,
     sprout: 200,
