@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import Button from "@/components/ui/Button";
 import { SproutDoodle } from "@/components/ui/DoodleSVG";
+import { lineAddFriendUrl } from "@/lib/constants";
 
 export default function FinalCTA() {
   return (
@@ -66,13 +67,15 @@ export default function FinalCTA() {
           transition={{ delay: 0.2 }}
           className="flex flex-col items-center gap-4"
         >
-          <Button
-            size="lg"
-            className="!bg-white !text-seed hover:!bg-cloud !shadow-xl !shadow-black/10"
-            icon={<span className="text-xl">💬</span>}
-          >
-            加入 LINE 好友
-          </Button>
+          <a href={lineAddFriendUrl} target="_blank" rel="noopener noreferrer">
+            <Button
+              size="lg"
+              className="!bg-white !text-seed hover:!bg-cloud !shadow-xl !shadow-black/10"
+              icon={<span className="text-xl">💬</span>}
+            >
+              加入 LINE 好友
+            </Button>
+          </a>
 
           <span className="text-white/60 text-sm flex items-center gap-1">
             🌱 免費開始：加好友→傳截圖→產生單字卡

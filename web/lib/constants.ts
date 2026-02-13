@@ -125,6 +125,9 @@ export const supportedLanguages = [
   { name: "德語", flag: "🇩🇪" },
 ] as const;
 
+// ── LINE Official Account ──
+export const lineAddFriendUrl = "https://lin.ee/pFkAWMI";
+
 // ── Payment info (manual transfer) ──
 export const paymentInfo = {
   jkoPay: {

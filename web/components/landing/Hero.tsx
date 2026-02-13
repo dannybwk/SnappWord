@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import Button from "@/components/ui/Button";
 import PhoneMockup from "@/components/ui/PhoneMockup";
 import { UnderlineDoodle, SparklesDoodle } from "@/components/ui/DoodleSVG";
-import { stats, demoCards } from "@/lib/constants";
+import { stats, demoCards, lineAddFriendUrl } from "@/lib/constants";
 import { useState, useEffect } from "react";
 
 function PhoneContent() {
@@ -172,9 +172,11 @@ export default function Hero() {
             transition={{ delay: 0.5 }}
             className="flex flex-wrap gap-4"
           >
-            <Button size="lg" icon={<span className="text-xl">💬</span>}>
-              加入 LINE 好友
-            </Button>
+            <a href={lineAddFriendUrl} target="_blank" rel="noopener noreferrer">
+              <Button size="lg" icon={<span className="text-xl">💬</span>}>
+                加入 LINE 好友
+              </Button>
+            </a>
             <a href="#how-it-works">
               <Button variant="ghost" size="lg">
                 往下看怎麼運作 ↓

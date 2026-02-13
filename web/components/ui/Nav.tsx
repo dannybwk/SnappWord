@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
-import { navLinks } from "@/lib/constants";
+import { navLinks, lineAddFriendUrl } from "@/lib/constants";
 import { LeafDoodle } from "./DoodleSVG";
 import Button from "./Button";
 
@@ -57,7 +57,9 @@ export default function Nav() {
                 Dashboard
               </Button>
             </Link>
-            <Button size="sm">加入 LINE 好友</Button>
+            <a href={lineAddFriendUrl} target="_blank" rel="noopener noreferrer">
+              <Button size="sm">加入 LINE 好友</Button>
+            </a>
           </div>
 
           {/* Mobile hamburger */}
@@ -107,7 +109,9 @@ export default function Nav() {
                   Dashboard
                 </Button>
               </Link>
-              <Button size="lg">加入 LINE 好友</Button>
+              <a href={lineAddFriendUrl} target="_blank" rel="noopener noreferrer">
+                <Button size="lg">加入 LINE 好友</Button>
+              </a>
             </div>
           </motion.div>
         )}
