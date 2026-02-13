@@ -69,6 +69,19 @@ async def get_message_content(message_id: str) -> bytes:
         return resp.content
 
 
+async def get_user_profile(user_id: str) -> dict | None:
+    """Get user profile from LINE (display name, picture URL)."""
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            f"{LINE_API_BASE}/profile/{user_id}",
+            headers=_headers(),
+        )
+        if not resp.is_success:
+            return None
+        data = resp.json()
+        return {"displayName": data.get("displayName", ""), "pictureUrl": data.get("pictureUrl")}
+
+
 async def reply_text(reply_token: str, text: str) -> None:
     """Quick helper to reply with a single text message."""
     await reply_message(reply_token, [{"type": "text", "text": text}])

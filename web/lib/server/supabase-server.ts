@@ -34,7 +34,17 @@ export async function getOrCreateUser(
     .eq("line_user_id", lineUserId)
     .single();
 
-  if (existing) return existing as DbUser;
+  if (existing) {
+    // Backfill display name if missing
+    if (displayName && !existing.display_name) {
+      await sb
+        .from("users")
+        .update({ display_name: displayName })
+        .eq("id", existing.id);
+      existing.display_name = displayName;
+    }
+    return existing as DbUser;
+  }
 
   const { data: created, error } = await sb
     .from("users")

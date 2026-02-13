@@ -21,6 +21,7 @@ from _lib.line_client import (
     reply_loading,
     push_message,
     get_message_content,
+    get_user_profile,
     reply_text,
 )
 from _lib.gemini_client import analyze_screenshot
@@ -106,7 +107,10 @@ async def _handle_message(event: dict) -> None:
 
 async def _process_screenshot(line_user_id: str, message_id: str) -> None:
     """Full pipeline: download → upload → AI analyze → store → push card."""
-    user = await asyncio.to_thread(get_or_create_user, line_user_id)
+    # Fetch LINE profile for display name
+    profile = await get_user_profile(line_user_id)
+    display_name = profile["displayName"] if profile else None
+    user = await asyncio.to_thread(get_or_create_user, line_user_id, display_name)
     user_id = user["id"]
 
     try:

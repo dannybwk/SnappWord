@@ -80,6 +80,18 @@ export async function replyText(
   await replyMessage(replyToken, [{ type: "text", text }]);
 }
 
+/** Get user profile from LINE. */
+export async function getUserProfile(
+  userId: string
+): Promise<{ displayName: string; pictureUrl?: string } | null> {
+  const resp = await fetch(`${LINE_API_BASE}/profile/${userId}`, {
+    headers: headers(),
+  });
+  if (!resp.ok) return null;
+  const data = await resp.json();
+  return { displayName: data.displayName, pictureUrl: data.pictureUrl };
+}
+
 /** Reply with a "processing" indicator. */
 export async function replyLoading(replyToken: string): Promise<void> {
   await replyText(

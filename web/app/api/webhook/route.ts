@@ -19,6 +19,7 @@ import {
   replyText,
   pushMessage,
   getMessageContent,
+  getUserProfile,
 } from "@/lib/server/line-client";
 import {
   analyzeScreenshot,
@@ -115,7 +116,9 @@ async function processScreenshot(
   let userId: string | null = null;
 
   try {
-    const user = await getOrCreateUser(lineUserId);
+    // Fetch LINE profile for display name
+    const profile = await getUserProfile(lineUserId);
+    const user = await getOrCreateUser(lineUserId, profile?.displayName);
     userId = user.id;
 
     // Check rate limit & monthly quota before processing

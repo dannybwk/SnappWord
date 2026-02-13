@@ -38,7 +38,12 @@ def get_or_create_user(line_user_id: str, display_name: str | None = None) -> di
     result = sb.table("users").select("*").eq("line_user_id", line_user_id).execute()
 
     if result.data:
-        return result.data[0]
+        user = result.data[0]
+        # Backfill display name if missing
+        if display_name and not user.get("display_name"):
+            sb.table("users").update({"display_name": display_name}).eq("id", user["id"]).execute()
+            user["display_name"] = display_name
+        return user
 
     new_user = {
         "line_user_id": line_user_id,
