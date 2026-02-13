@@ -12,7 +12,7 @@ import asyncio
 import logging
 from urllib.parse import parse_qs
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 
 from _lib import config
 from _lib.models import ReviewStatus
@@ -48,7 +48,7 @@ app = FastAPI()
 
 
 @app.post("/api/webhook")
-async def webhook(request: Request) -> dict:
+async def webhook(request: Request, background_tasks: BackgroundTasks) -> dict:
     """LINE Webhook endpoint."""
     body = await request.body()
     signature = request.headers.get("X-Line-Signature", "")
@@ -60,10 +60,7 @@ async def webhook(request: Request) -> dict:
     events = payload.get("events", [])
 
     for event in events:
-        # Fire-and-forget with timeout: don't block the webhook response
-        asyncio.ensure_future(
-            asyncio.wait_for(_handle_event(event), timeout=300)
-        )
+        background_tasks.add_task(_handle_event, event)
 
     return {"status": "ok"}
 
