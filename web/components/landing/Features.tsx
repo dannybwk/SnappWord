@@ -222,12 +222,20 @@ export default function Features() {
             delay={0.3}
           />
 
+          {/* Export */}
+          <FeatureCard
+            title="一鍵匯出"
+            description="支援 Anki、CSV 格式匯出，融入你現有的學習流程"
+            icon="📦"
+            delay={0.35}
+          />
+
           {/* Free tier */}
           <FeatureCard
             title="免費開始"
             description="每月 NT$0 起，無需綁定信用卡就能開始你的語言花園"
             icon="🌱"
-            delay={0.35}
+            delay={0.4}
           />
         </div>
       </div>
