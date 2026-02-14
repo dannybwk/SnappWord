@@ -27,6 +27,9 @@ export interface DbUser {
   stripe_customer_id: string | null;
   subscription_tier: string; // 'free' | 'sprout' | 'bloom'
   subscription_expires_at: string | null;
+  current_streak: number;
+  longest_streak: number;
+  last_review_date: string | null;
   created_at: string;
 }
 
@@ -47,6 +50,15 @@ export interface DbVocabCard {
   next_review_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface DbWordList {
+  id: string;
+  user_id: string;
+  name: string;
+  emoji: string;
+  created_at: string;
+  card_count?: number; // computed in query
 }
 
 // ── LINE Webhook Types ──

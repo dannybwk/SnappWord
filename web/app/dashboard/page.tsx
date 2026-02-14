@@ -8,6 +8,7 @@ import { WeeklyChart, LanguagePieChart, MasteryRing } from "@/components/dashboa
 import VocabTable from "@/components/dashboard/VocabTable";
 import ExportPanel from "@/components/dashboard/ExportPanel";
 import Button from "@/components/ui/Button";
+import StreakBadge from "@/components/dashboard/StreakBadge";
 import Link from "next/link";
 
 function getGreeting(): string {
@@ -42,6 +43,7 @@ export default function DashboardPage() {
   const [cards, setCards] = useState<VocabCard[]>([]);
   const [quota, setQuota] = useState<{ used: number; limit: number; tier?: string; expiresAt?: string | null } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [streak, setStreak] = useState({ current_streak: 0, longest_streak: 0 });
 
   useEffect(() => {
     if (!user?.dbUserId) return;
@@ -61,7 +63,20 @@ export default function DashboardPage() {
       }
     }
 
+    async function fetchStreak() {
+      try {
+        const res = await fetch(`/api/flashcard?userId=${user!.dbUserId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.streak) setStreak(data.streak);
+        }
+      } catch {
+        // ignore
+      }
+    }
+
     fetchCards();
+    fetchStreak();
   }, [user?.dbUserId]);
 
   const totalWords = cards.length;
@@ -134,11 +149,17 @@ export default function DashboardPage() {
               </>
             )}
           </div>
-          <Link href="/quiz">
-            <Button size="md" icon={<span>🎯</span>}>
-              開始複習
-            </Button>
-          </Link>
+          <div className="flex flex-col items-end gap-2">
+            <StreakBadge
+              currentStreak={streak.current_streak}
+              longestStreak={streak.longest_streak}
+            />
+            <Link href="/flashcard">
+              <Button size="md" icon={<span>🃏</span>}>
+                開始複習
+              </Button>
+            </Link>
+          </div>
         </div>
       </motion.div>
 

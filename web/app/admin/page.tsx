@@ -34,7 +34,6 @@ interface StatsData {
     tiers: { name: string; value: number }[];
   };
   tables: {
-    recentUsers: never[];
     recentErrors: never[];
   };
   revenue: {
@@ -184,6 +183,11 @@ export default function AdminPage() {
           </section>
 
           <section>
+            <h2 className="font-heading font-bold text-lg text-earth mb-3">即將到期用戶</h2>
+            <ExpiringUsersTable users={data.expiringUsers} />
+          </section>
+
+          <section>
             <h2 className="font-heading font-bold text-lg text-earth mb-3">升級申請</h2>
             <UpgradeRequests />
           </section>
@@ -211,9 +215,8 @@ export default function AdminPage() {
           </section>
 
           <section>
-            <h2 className="font-heading font-bold text-lg text-earth mb-3">資料</h2>
+            <h2 className="font-heading font-bold text-lg text-earth mb-3">錯誤紀錄</h2>
             <AdminTables
-              recentUsers={data.tables.recentUsers}
               recentErrors={data.tables.recentErrors}
             />
           </section>

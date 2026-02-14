@@ -3,7 +3,7 @@
  */
 
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import type { GeminiParseResult, DbUser } from "./types";
+import type { GeminiParseResult, DbUser, DbWordList } from "./types";
 
 const STORAGE_BUCKET = "user_screenshots";
 
@@ -166,7 +166,7 @@ const DAILY_LIMITS: Record<string, number> = {
   bloom: 500,
 };
 
-function getUserTier(user: DbUser): string {
+export function getUserTier(user: DbUser): string {
   // Check subscription_tier from Stripe integration
   if (user.subscription_tier && user.subscription_tier !== "free") {
     return user.subscription_tier;
@@ -554,6 +554,302 @@ export async function getUsersExpiringIn(
     .neq("subscription_tier", "free");
 
   return (data || []) as { id: string; line_user_id: string; display_name: string | null; subscription_tier: string; subscription_expires_at: string }[];
+}
+
+// ── Flashcard Review ──
+
+/** Daily review limits per tier. */
+const FLASHCARD_DAILY_LIMITS: Record<string, number> = {
+  free: 10,
+  sprout: Infinity,
+  bloom: Infinity,
+};
+
+/** Get flashcard deck for review with remaining count and streak. */
+export async function getFlashcardDeck(
+  userId: string,
+  tier: string
+): Promise<{
+  cards: Record<string, unknown>[];
+  remaining: number;
+  limitReached: boolean;
+  streak: { current_streak: number; longest_streak: number };
+}> {
+  const sb = getClient();
+  const cards = await getDueCards(userId);
+
+  const dailyLimit = FLASHCARD_DAILY_LIMITS[tier] ?? FLASHCARD_DAILY_LIMITS.free;
+
+  let remaining = Infinity;
+  let limitReached = false;
+
+  if (dailyLimit !== Infinity) {
+    const dayStart = new Date();
+    dayStart.setHours(0, 0, 0, 0);
+
+    const { count } = await sb
+      .from("api_logs")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("event_type", "flashcard_review")
+      .gte("created_at", dayStart.toISOString());
+
+    const reviewedToday = count ?? 0;
+    remaining = Math.max(0, dailyLimit - reviewedToday);
+    limitReached = remaining === 0;
+  }
+
+  const streak = await getStreak(userId);
+
+  // If limit reached, return empty cards
+  if (limitReached) {
+    return { cards: [], remaining: 0, limitReached: true, streak };
+  }
+
+  // Cap cards to remaining limit
+  const cappedCards = dailyLimit !== Infinity ? cards.slice(0, remaining) : cards;
+
+  return { cards: cappedCards, remaining, limitReached: false, streak };
+}
+
+/** Record a flashcard review (correct or incorrect), update SRS and streak. */
+export async function recordFlashcardReview(
+  cardId: string,
+  userId: string,
+  known: boolean
+): Promise<{ streak: { current_streak: number; longest_streak: number } }> {
+  if (known) {
+    await advanceCardSRS(cardId);
+  } else {
+    await resetCardSRS(cardId);
+  }
+
+  await logEvent(userId, "flashcard_review", {
+    payload: { card_id: cardId, known },
+  });
+
+  const streak = await updateStreak(userId);
+  return { streak };
+}
+
+// ── Streak ──
+
+/** Update user streak based on review activity. */
+export async function updateStreak(
+  userId: string
+): Promise<{ current_streak: number; longest_streak: number }> {
+  const sb = getClient();
+
+  const { data: user } = await sb
+    .from("users")
+    .select("current_streak, longest_streak, last_review_date")
+    .eq("id", userId)
+    .single();
+
+  if (!user) return { current_streak: 0, longest_streak: 0 };
+
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+  if (user.last_review_date === todayStr) {
+    // Already reviewed today, no change
+    return { current_streak: user.current_streak, longest_streak: user.longest_streak };
+  }
+
+  let newStreak: number;
+
+  if (user.last_review_date) {
+    const lastDate = new Date(user.last_review_date + "T00:00:00");
+    const diffMs = today.getTime() - lastDate.getTime();
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffDays === 1) {
+      // Consecutive day
+      newStreak = user.current_streak + 1;
+    } else {
+      // Streak broken
+      newStreak = 1;
+    }
+  } else {
+    // First review ever
+    newStreak = 1;
+  }
+
+  const newLongest = Math.max(newStreak, user.longest_streak);
+
+  await sb
+    .from("users")
+    .update({
+      current_streak: newStreak,
+      longest_streak: newLongest,
+      last_review_date: todayStr,
+    })
+    .eq("id", userId);
+
+  return { current_streak: newStreak, longest_streak: newLongest };
+}
+
+/** Get user streak data. */
+export async function getStreak(
+  userId: string
+): Promise<{ current_streak: number; longest_streak: number }> {
+  const sb = getClient();
+  const { data } = await sb
+    .from("users")
+    .select("current_streak, longest_streak")
+    .eq("id", userId)
+    .single();
+
+  return {
+    current_streak: data?.current_streak ?? 0,
+    longest_streak: data?.longest_streak ?? 0,
+  };
+}
+
+// ── Word Lists ──
+
+/** Get user's word lists with card counts, plus language groups. */
+export async function getUserWordLists(
+  userId: string
+): Promise<{
+  lists: DbWordList[];
+  languageGroups: { lang: string; count: number }[];
+}> {
+  const sb = getClient();
+
+  // Manual lists with card counts
+  const { data: lists } = await sb
+    .from("word_lists")
+    .select("*, vocab_cards(count)")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+
+  const formattedLists: DbWordList[] = (lists || []).map((l: Record<string, unknown>) => ({
+    id: l.id as string,
+    user_id: l.user_id as string,
+    name: l.name as string,
+    emoji: l.emoji as string,
+    created_at: l.created_at as string,
+    card_count: Array.isArray(l.vocab_cards) && l.vocab_cards.length > 0
+      ? (l.vocab_cards[0] as { count: number }).count
+      : 0,
+  }));
+
+  // Language groups
+  const { data: cards } = await sb
+    .from("vocab_cards")
+    .select("target_lang")
+    .eq("user_id", userId);
+
+  const langMap = new Map<string, number>();
+  for (const c of cards || []) {
+    const lang = (c as { target_lang: string }).target_lang;
+    langMap.set(lang, (langMap.get(lang) || 0) + 1);
+  }
+  const languageGroups = Array.from(langMap.entries())
+    .map(([lang, count]) => ({ lang, count }))
+    .sort((a, b) => b.count - a.count);
+
+  return { lists: formattedLists, languageGroups };
+}
+
+/** Create a word list (free limit: 3). */
+export async function createWordList(
+  userId: string,
+  name: string,
+  emoji: string,
+  tier: string
+): Promise<{ list?: DbWordList; error?: string }> {
+  const sb = getClient();
+
+  if (tier === "free") {
+    const { count } = await sb
+      .from("word_lists")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", userId);
+
+    if ((count ?? 0) >= 3) {
+      return { error: "free_limit" };
+    }
+  }
+
+  const { data, error } = await sb
+    .from("word_lists")
+    .insert({ user_id: userId, name, emoji })
+    .select()
+    .single();
+
+  if (error) throw new Error(`Failed to create word list: ${error.message}`);
+  return { list: { ...(data as DbWordList), card_count: 0 } };
+}
+
+/** Delete a word list (cards' list_id will be set null by FK). */
+export async function deleteWordList(
+  listId: string,
+  userId: string
+): Promise<boolean> {
+  const sb = getClient();
+  const { data } = await sb
+    .from("word_lists")
+    .delete()
+    .eq("id", listId)
+    .eq("user_id", userId)
+    .select("id");
+
+  return (data?.length ?? 0) > 0;
+}
+
+/** Assign cards to a word list. */
+export async function assignCardsToList(
+  cardIds: string[],
+  listId: string | null,
+  userId: string
+): Promise<void> {
+  const sb = getClient();
+  await sb
+    .from("vocab_cards")
+    .update({ list_id: listId })
+    .in("id", cardIds)
+    .eq("user_id", userId);
+}
+
+/** Get users who have due cards (for cron review reminders). */
+export async function getUsersWithDueCards(): Promise<
+  { id: string; line_user_id: string; display_name: string | null; current_streak: number; due_count: number }[]
+> {
+  const sb = getClient();
+  const now = new Date().toISOString();
+
+  // Get all users with due cards
+  const { data: cards } = await sb
+    .from("vocab_cards")
+    .select("user_id")
+    .or(`review_status.eq.0,next_review_at.lte.${now}`);
+
+  if (!cards || cards.length === 0) return [];
+
+  // Count due cards per user
+  const userCounts = new Map<string, number>();
+  for (const c of cards) {
+    const uid = (c as { user_id: string }).user_id;
+    userCounts.set(uid, (userCounts.get(uid) || 0) + 1);
+  }
+
+  const userIds = Array.from(userCounts.keys());
+
+  // Get user details
+  const { data: users } = await sb
+    .from("users")
+    .select("id, line_user_id, display_name, current_streak")
+    .in("id", userIds);
+
+  return (users || []).map((u: Record<string, unknown>) => ({
+    id: u.id as string,
+    line_user_id: u.line_user_id as string,
+    display_name: u.display_name as string | null,
+    current_streak: (u.current_streak as number) ?? 0,
+    due_count: userCounts.get(u.id as string) || 0,
+  }));
 }
 
 // ── Logging ──

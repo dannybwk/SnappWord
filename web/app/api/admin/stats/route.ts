@@ -64,7 +64,6 @@ export async function GET(request: NextRequest) {
     langDist,
     sourceDist,
     tierDist,
-    recentUsers,
     recentErrors,
     // Revenue & expiring & retention queries
     monthlyUpgrades,
@@ -100,7 +99,6 @@ export async function GET(request: NextRequest) {
     sb.from("users").select("subscription_tier"),
 
     // Tables
-    sb.from("users").select("*, vocab_cards(count)").order("created_at", { ascending: false }).limit(20),
     sb.from("api_logs").select("*, users(display_name)").eq("event_type", "parse_fail").order("created_at", { ascending: false }).limit(20),
 
     // Revenue: this month approved upgrades
@@ -297,7 +295,6 @@ export async function GET(request: NextRequest) {
       tiers: countField(tierDist.data as Record<string, string>[] | null, "subscription_tier"),
     },
     tables: {
-      recentUsers: recentUsers.data || [],
       recentErrors: recentErrors.data || [],
     },
     revenue: {

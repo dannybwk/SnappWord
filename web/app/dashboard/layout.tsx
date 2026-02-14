@@ -9,7 +9,9 @@ import LoginScreen from "@/components/auth/LoginScreen";
 
 const sidebarLinks = [
   { href: "/dashboard", label: "總覽", icon: "🏠" },
+  { href: "/flashcard", label: "翻卡複習", icon: "🃏" },
   { href: "/quiz", label: "測驗", icon: "🎯" },
+  { href: "/word-lists", label: "單字本", icon: "📚" },
   { href: "/pricing", label: "方案", icon: "💎" },
 ];
 
