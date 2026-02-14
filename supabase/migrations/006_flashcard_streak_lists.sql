@@ -16,6 +16,14 @@ CREATE TABLE word_lists (
 );
 CREATE INDEX idx_word_lists_user ON word_lists(user_id);
 
+-- RLS: service role has full access (same pattern as other tables)
+ALTER TABLE word_lists ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Service role full access on word_lists"
+  ON word_lists FOR ALL
+  USING (TRUE)
+  WITH CHECK (TRUE);
+
 -- Optional list assignment on cards
 ALTER TABLE vocab_cards
   ADD COLUMN list_id UUID REFERENCES word_lists(id) ON DELETE SET NULL;
