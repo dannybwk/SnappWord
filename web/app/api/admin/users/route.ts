@@ -38,9 +38,10 @@ async function verifyAdmin(request: NextRequest): Promise<string | false> {
 // Gemini 2.0 Flash blended rate: ~$0.16/1M tokens
 const GEMINI_COST_PER_TOKEN = 0.16 / 1_000_000;
 
-// Base columns guaranteed to exist on users table (pre-migration 006)
-const BASE_USER_SELECT =
-  "id, display_name, line_user_id, subscription_tier, subscription_expires_at, created_at, vocab_cards(count)";
+// Use wildcard to select all existing columns regardless of which migrations
+// have been applied (002 adds subscription_tier, 005 adds subscription_expires_at,
+// 006 adds streak columns). vocab_cards(count) is a joined aggregate.
+const USER_SELECT = "*, vocab_cards(count)";
 
 /** GET /api/admin/users?q=keyword&page=1&limit=50 — list/search users with enriched data */
 export async function GET(request: NextRequest) {
@@ -58,7 +59,7 @@ export async function GET(request: NextRequest) {
   // ── Step 1: Core query — only base columns, always works ──
   let coreQuery = sb
     .from("users")
-    .select(BASE_USER_SELECT, { count: "exact" })
+    .select(USER_SELECT, { count: "exact" })
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
@@ -136,18 +137,23 @@ export async function GET(request: NextRequest) {
   }
 
   // ── Step 3: Merge core + enrichment ──
+  // Columns from migration 002/005 may not exist — use optional access with fallbacks
   const enrichedUsers = users.map((u: Record<string, unknown>) => {
     const uid = u.id as string;
     const activity = activityMap.get(uid) || { count7d: 0, lastActive: null };
     const cost = costMap.get(uid) || { totalTokens: 0, callCount: 0 };
     const vocabCards = u.vocab_cards as { count: number }[] | undefined;
 
+    // subscription_tier (from migration 002) — fall back to is_premium (from 001)
+    const tier = (u.subscription_tier as string | undefined)
+      ?? (u.is_premium ? "sprout" : "free");
+
     return {
       id: uid,
       display_name: u.display_name as string | null,
       line_user_id: u.line_user_id as string,
-      subscription_tier: u.subscription_tier as string | null,
-      subscription_expires_at: u.subscription_expires_at as string | null,
+      subscription_tier: tier,
+      subscription_expires_at: (u.subscription_expires_at as string | undefined) ?? null,
       current_streak: streakMap.get(uid) ?? 0,
       created_at: u.created_at as string,
       card_count: vocabCards?.[0]?.count ?? 0,

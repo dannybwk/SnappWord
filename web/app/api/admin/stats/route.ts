@@ -93,22 +93,22 @@ export async function GET(request: NextRequest) {
     sb.from("api_logs").select("created_at").eq("event_type", "gemini_call").gte("created_at", thirtyDaysAgo),
     sb.from("api_logs").select("created_at").eq("event_type", "parse_fail").gte("created_at", thirtyDaysAgo),
 
-    // Distributions
+    // Distributions — use select("*") so missing columns don't crash the query
     sb.from("vocab_cards").select("target_lang"),
     sb.from("vocab_cards").select("source_app"),
-    sb.from("users").select("subscription_tier"),
+    sb.from("users").select("*"),
 
     // Tables
     sb.from("api_logs").select("*, users(display_name)").eq("event_type", "parse_fail").order("created_at", { ascending: false }).limit(20),
 
-    // Revenue: this month approved upgrades
-    sb.from("upgrade_requests").select("tier, months_paid").eq("status", "approved").gte("created_at", monthStart),
+    // Revenue: this month approved upgrades (column is approved_tier, not tier)
+    sb.from("upgrade_requests").select("approved_tier, months_paid").eq("status", "approved").gte("created_at", monthStart),
     // Revenue: all-time approved upgrades
-    sb.from("upgrade_requests").select("tier, months_paid"),
-    // Paid users with active subscription
+    sb.from("upgrade_requests").select("approved_tier, months_paid"),
+    // Paid users with active subscription — may return error if columns don't exist (degrades to 0)
     sb.from("users").select("*", { count: "exact", head: true }).neq("subscription_tier", "free").gt("subscription_expires_at", now.toISOString()),
-    // Users expiring within 7 days
-    sb.from("users").select("id, display_name, subscription_tier, subscription_expires_at").neq("subscription_tier", "free").gt("subscription_expires_at", now.toISOString()).lte("subscription_expires_at", sevenDaysFromNow).order("subscription_expires_at", { ascending: true }),
+    // Users expiring within 7 days — use select("*") so missing columns don't crash
+    sb.from("users").select("*").neq("subscription_tier", "free").gt("subscription_expires_at", now.toISOString()).lte("subscription_expires_at", sevenDaysFromNow).order("subscription_expires_at", { ascending: true }),
     // Users registered around 30 days ago (window: 28-32 days) for retention
     sb.from("users").select("line_user_id, created_at").lte("created_at", thirtyDaysAgo),
     // All image_received events for retention calculation
@@ -174,30 +174,33 @@ export async function GET(request: NextRequest) {
       : 0,
   }));
 
-  // Revenue computation
-  function computeRevenue(rows: { tier: string; months_paid: number | null }[] | null): number {
+  // Revenue computation (column is approved_tier in upgrade_requests table)
+  function computeRevenue(rows: { approved_tier: string; months_paid: number | null }[] | null): number {
     return (rows || []).reduce((sum, r) => {
-      const price = TIER_PRICES[r.tier] || 0;
+      const price = TIER_PRICES[r.approved_tier] || 0;
       return sum + price * (r.months_paid || 1);
     }, 0);
   }
 
-  const monthlyRevenue = computeRevenue(monthlyUpgrades.data as { tier: string; months_paid: number | null }[] | null);
-  const totalRevenue = computeRevenue(allUpgrades.data as { tier: string; months_paid: number | null }[] | null);
+  const monthlyRevenue = computeRevenue(monthlyUpgrades.data as { approved_tier: string; months_paid: number | null }[] | null);
+  const totalRevenue = computeRevenue(allUpgrades.data as { approved_tier: string; months_paid: number | null }[] | null);
   const paidUserCount = activePaidUsers.count ?? 0;
   const totalUserCount = totalUsers.count ?? 0;
   const conversionRate = totalUserCount > 0
     ? Math.round((paidUserCount / totalUserCount) * 1000) / 10
     : 0;
 
-  // Expiring users
-  const expiringUsers = (expiringUsersRaw.data || []).map((u: { id: string; display_name: string | null; subscription_tier: string; subscription_expires_at: string }) => {
-    const daysLeft = Math.max(0, Math.ceil((new Date(u.subscription_expires_at).getTime() - now.getTime()) / 86400000));
+  // Expiring users — columns may not exist if migration 002/005 not applied
+  const expiringUsers = (expiringUsersRaw.data || []).map((u: Record<string, unknown>) => {
+    const expiresAt = u.subscription_expires_at as string | undefined;
+    const daysLeft = expiresAt
+      ? Math.max(0, Math.ceil((new Date(expiresAt).getTime() - now.getTime()) / 86400000))
+      : 0;
     return {
-      id: u.id,
-      displayName: u.display_name || "—",
-      tier: u.subscription_tier,
-      expiresAt: u.subscription_expires_at,
+      id: u.id as string,
+      displayName: (u.display_name as string) || "—",
+      tier: (u.subscription_tier as string) || (u.is_premium ? "premium" : "free"),
+      expiresAt: expiresAt || "",
       daysLeft,
     };
   });
@@ -274,6 +277,19 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => b.value - a.value);
   }
 
+  // Tier distribution — handle missing subscription_tier by falling back to is_premium
+  function computeTierDist(rows: Record<string, unknown>[] | null): { name: string; value: number }[] {
+    const counts: Record<string, number> = {};
+    (rows || []).forEach((r) => {
+      const val = (r.subscription_tier as string)
+        || (r.is_premium ? "premium" : "free");
+      counts[val] = (counts[val] || 0) + 1;
+    });
+    return Object.entries(counts)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }
+
   return NextResponse.json({
     kpis: {
       totalUsers: totalUsers.count ?? 0,
@@ -292,7 +308,7 @@ export async function GET(request: NextRequest) {
     distributions: {
       languages: countField(langDist.data as Record<string, string>[] | null, "target_lang"),
       sourceApps: countField(sourceDist.data as Record<string, string>[] | null, "source_app"),
-      tiers: countField(tierDist.data as Record<string, string>[] | null, "subscription_tier"),
+      tiers: computeTierDist(tierDist.data as Record<string, unknown>[] | null),
     },
     tables: {
       recentErrors: recentErrors.data || [],

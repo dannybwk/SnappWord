@@ -454,11 +454,12 @@ export async function completeUpgradeRequest(
 /** List upgrade requests (for admin). Optional status filter. */
 export async function getUpgradeRequests(
   status?: string
-): Promise<(UpgradeRequest & { users: { display_name: string; subscription_tier: string | null; subscription_expires_at: string | null } })[]> {
+): Promise<(UpgradeRequest & { users: { display_name: string | null } })[]> {
   const sb = getClient();
+  // Use users(*) to avoid referencing columns that may not exist (subscription_tier from 002)
   let query = sb
     .from("upgrade_requests")
-    .select("*, users(display_name, subscription_tier, subscription_expires_at)")
+    .select("*, users(display_name)")
     .order("created_at", { ascending: false })
     .limit(50);
 
@@ -497,13 +498,12 @@ export async function reviewUpgradeRequest(
     // Calculate expiry: extend from current expiry if still active, otherwise from now
     const { data: user } = await sb
       .from("users")
-      .select("subscription_expires_at")
+      .select("*")
       .eq("id", req.user_id)
       .single();
 
-    const currentExpiry = user?.subscription_expires_at
-      ? new Date(user.subscription_expires_at)
-      : null;
+    const expiryStr = user?.subscription_expires_at as string | undefined;
+    const currentExpiry = expiryStr ? new Date(expiryStr) : null;
     const base = currentExpiry && currentExpiry > now ? currentExpiry : now;
     const expiresAt = new Date(base);
     expiresAt.setMonth(expiresAt.getMonth() + paidMonths);
@@ -546,14 +546,22 @@ export async function getUsersExpiringIn(
   const dayStart = new Date(target.getFullYear(), target.getMonth(), target.getDate()).toISOString();
   const dayEnd = new Date(target.getFullYear(), target.getMonth(), target.getDate() + 1).toISOString();
 
+  // Use select("*") to avoid referencing columns that may not exist (migration 002/005)
+  // Filter on subscription_expires_at — if column doesn't exist, query returns empty (graceful)
   const { data } = await sb
     .from("users")
-    .select("id, line_user_id, display_name, subscription_tier, subscription_expires_at")
+    .select("*")
     .gte("subscription_expires_at", dayStart)
     .lt("subscription_expires_at", dayEnd)
     .neq("subscription_tier", "free");
 
-  return (data || []) as { id: string; line_user_id: string; display_name: string | null; subscription_tier: string; subscription_expires_at: string }[];
+  return (data || []).map((u: Record<string, unknown>) => ({
+    id: u.id as string,
+    line_user_id: u.line_user_id as string,
+    display_name: (u.display_name as string | null) ?? null,
+    subscription_tier: (u.subscription_tier as string) || "free",
+    subscription_expires_at: (u.subscription_expires_at as string) || "",
+  }));
 }
 
 // ── Flashcard Review ──
