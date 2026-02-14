@@ -75,18 +75,24 @@ export default function UserManagement() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [editingTier, setEditingTier] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [saveResult, setSaveResult] = useState<Record<string, "ok" | "fail">>({});
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initialFetchDone = useRef(false);
   const limit = 50;
 
   const fetchUsers = useCallback(async (q: string, p: number) => {
     setLoading(true);
+    setError(null);
     try {
       const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) return;
+      if (!session?.access_token) {
+        setError("未登入或 session 已過期");
+        return;
+      }
 
       const params = new URLSearchParams({ page: String(p), limit: String(limit) });
       if (q.trim()) params.set("q", q.trim());
@@ -94,25 +100,34 @@ export default function UserManagement() {
       const res = await fetch(`/api/admin/users?${params}`, {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
-      if (res.ok) {
-        const data = await res.json();
-        setUsers(data.users || []);
-        setTotal(data.total || 0);
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error || `API 錯誤 (${res.status})`);
+        return;
       }
-    } catch {
-      // ignore
+
+      const data = await res.json();
+      setUsers(data.users || []);
+      setTotal(data.total || 0);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "載入失敗");
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Initial load: all users
+  // Debounced search — also handles initial load
   useEffect(() => {
-    fetchUsers("", 1);
-  }, [fetchUsers]);
+    // On mount (first render), fetch immediately without delay
+    if (!initialFetchDone.current) {
+      initialFetchDone.current = true;
+      setPage(1);
+      fetchUsers(query, 1);
+      return;
+    }
 
-  // Debounced search
-  useEffect(() => {
+    // Subsequent query changes are debounced
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       setPage(1);
@@ -190,11 +205,24 @@ export default function UserManagement() {
         />
       </div>
 
-      {loading && users.length === 0 && (
+      {error && (
+        <div className="text-red-500 text-sm py-4 text-center bg-red-50 rounded-xl mb-3">
+          <div className="font-medium">載入失敗</div>
+          <div className="text-red-400 text-xs mt-1">{error}</div>
+          <button
+            onClick={() => fetchUsers(query, page)}
+            className="mt-2 px-3 py-1 rounded-lg text-xs font-medium text-white bg-red-400 hover:bg-red-500 transition-colors"
+          >
+            重試
+          </button>
+        </div>
+      )}
+
+      {!error && loading && users.length === 0 && (
         <div className="text-earth-light text-sm py-8 text-center">載入用戶中...</div>
       )}
 
-      {!loading && users.length === 0 && (
+      {!error && !loading && users.length === 0 && (
         <div className="text-earth-light text-sm py-8 text-center">
           {query.trim() ? "找不到符合的用戶" : "尚無用戶"}
         </div>
