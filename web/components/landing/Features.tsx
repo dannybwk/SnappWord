@@ -77,6 +77,56 @@ function MemoryCurve() {
   );
 }
 
+function SwipeDemo() {
+  return (
+    <div className="mt-3 flex items-center justify-center gap-3">
+      <motion.div
+        className="flex items-center gap-1 text-xs text-red-400 font-medium"
+        animate={{ x: [-2, -6, -2] }}
+        transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+      >
+        <span>忘了</span>
+        <span>👈</span>
+      </motion.div>
+      <div className="w-16 h-20 bg-cloud rounded-xl border border-mist/60 flex flex-col items-center justify-center shadow-sm">
+        <span className="text-lg font-heading font-bold text-earth">単語</span>
+        <span className="text-[9px] text-earth-light mt-0.5">たんご</span>
+      </div>
+      <motion.div
+        className="flex items-center gap-1 text-xs text-seed font-medium"
+        animate={{ x: [2, 6, 2] }}
+        transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+      >
+        <span>👉</span>
+        <span>記得</span>
+      </motion.div>
+    </div>
+  );
+}
+
+function StreakDisplay() {
+  return (
+    <div className="mt-3 flex items-center gap-2">
+      {[1, 2, 3, 4, 5, 6, 7].map((day) => (
+        <motion.div
+          key={day}
+          initial={{ scale: 0 }}
+          whileInView={{ scale: 1 }}
+          viewport={{ once: true }}
+          transition={{ delay: day * 0.08, type: "spring", stiffness: 300 }}
+          className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+            day <= 5
+              ? "bg-orange-100 text-orange-500"
+              : "bg-cloud text-earth-light/40"
+          }`}
+        >
+          {day <= 5 ? "🔥" : day}
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
 export default function Features() {
   return (
     <section id="features" className="py-24 relative">
@@ -136,30 +186,40 @@ export default function Features() {
             <LanguageFlags />
           </FeatureCard>
 
-          {/* Cloud storage */}
+          {/* Flashcard review - NEW */}
           <FeatureCard
-            title="雲端存儲"
-            description="所有單字卡安全存在雲端，換手機也不怕遺失"
-            icon="☁️"
+            title="翻卡複習"
+            description="左滑忘了、右滑記得，像交友軟體一樣直覺。到期的單字自動浮出，複習不費腦。"
+            icon="🃏"
             delay={0.15}
-          />
-
-          {/* SRS */}
-          <FeatureCard
-            title="SRS 間隔複習"
-            description="科學化的記憶曲線排程，在最佳時機提醒你複習"
-            icon="🧪"
-            delay={0.2}
           >
-            <MemoryCurve />
+            <SwipeDemo />
           </FeatureCard>
 
-          {/* Export */}
+          {/* SRS + Streak */}
           <FeatureCard
-            title="一鍵匯出"
-            description="支援 Anki、CSV 格式匯出，融入你現有的學習流程"
-            icon="📦"
+            title="SRS 間隔複習"
+            description="科學化的記憶曲線排程，在最佳時機提醒你複習。搭配連續天數追蹤，養成每日學習習慣。"
+            icon="🔥"
+            delay={0.2}
+          >
+            <StreakDisplay />
+          </FeatureCard>
+
+          {/* Word lists - NEW */}
+          <FeatureCard
+            title="單字本分類"
+            description="依語言自動分類，也能手動建立專屬單字本。整理你的學習成果，一目瞭然。"
+            icon="📚"
             delay={0.25}
+          />
+
+          {/* TTS - NEW */}
+          <FeatureCard
+            title="真人發音"
+            description="一鍵播放單字原生發音，支援英日韓等多種語言，聽說讀寫全面覆蓋。"
+            icon="🔊"
+            delay={0.3}
           />
 
           {/* Free tier */}
@@ -167,7 +227,7 @@ export default function Features() {
             title="免費開始"
             description="每月 NT$0 起，無需綁定信用卡就能開始你的語言花園"
             icon="🌱"
-            delay={0.3}
+            delay={0.35}
           />
         </div>
       </div>

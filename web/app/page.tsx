@@ -16,7 +16,7 @@ const faqJsonLd = {
       name: "SnappWord 截詞是什麼？",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "SnappWord 截詞是一款 AI LINE Bot，只要傳送語言學習的截圖，AI 就會自動辨識並生成精美的單字卡，幫助你高效記憶單字。",
+        text: "SnappWord 截詞是一款 AI LINE Bot，只要傳送語言學習的截圖，AI 就會自動辨識並生成精美的單字卡。還有翻卡複習、連續天數追蹤、單字本分類、真人發音等功能，幫助你高效記憶單字。",
       },
     },
     {
