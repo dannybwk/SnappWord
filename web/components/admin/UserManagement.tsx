@@ -10,7 +10,6 @@ interface EnrichedUser {
   subscription_tier: string | null;
   subscription_expires_at: string | null;
   current_streak: number;
-  last_review_date: string | null;
   created_at: string;
   card_count: number;
   activity_7d: number;

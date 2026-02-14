@@ -38,6 +38,10 @@ async function verifyAdmin(request: NextRequest): Promise<string | false> {
 // Gemini 2.0 Flash blended rate: ~$0.16/1M tokens
 const GEMINI_COST_PER_TOKEN = 0.16 / 1_000_000;
 
+// Base columns guaranteed to exist on users table (pre-migration 006)
+const BASE_USER_SELECT =
+  "id, display_name, line_user_id, subscription_tier, subscription_expires_at, created_at, vocab_cards(count)";
+
 /** GET /api/admin/users?q=keyword&page=1&limit=50 — list/search users with enriched data */
 export async function GET(request: NextRequest) {
   if (!(await verifyAdmin(request))) {
@@ -51,22 +55,19 @@ export async function GET(request: NextRequest) {
 
   const sb = getClient();
 
-  // Build user query
-  let userQuery = sb
+  // ── Step 1: Core query — only base columns, always works ──
+  let coreQuery = sb
     .from("users")
-    .select(
-      "id, display_name, line_user_id, subscription_tier, subscription_expires_at, current_streak, last_review_date, created_at, vocab_cards(count)",
-      { count: "exact" }
-    )
+    .select(BASE_USER_SELECT, { count: "exact" })
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
   if (q.trim()) {
     const pattern = `%${q.trim()}%`;
-    userQuery = userQuery.or(`display_name.ilike.${pattern},line_user_id.ilike.${pattern}`);
+    coreQuery = coreQuery.or(`display_name.ilike.${pattern},line_user_id.ilike.${pattern}`);
   }
 
-  const { data: users, count: totalCount, error } = await userQuery;
+  const { data: users, count: totalCount, error } = await coreQuery;
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -76,28 +77,34 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ users: [], total: 0, page, limit });
   }
 
-  // Fetch activity and cost data for these users in parallel
   const userIds = users.map((u: { id: string }) => u.id);
-
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
 
-  const [activityResult, costResult] = await Promise.all([
-    // Recent activity: count of api_logs events in last 7 days per user
+  // ── Step 2: Enrichment queries — all optional, run in parallel ──
+  const [activityResult, costResult, streakResult] = await Promise.all([
+    // Activity: api_logs events in last 7 days (always works)
     sb
       .from("api_logs")
       .select("user_id, created_at")
       .in("user_id", userIds)
       .gte("created_at", sevenDaysAgo),
-    // Cost: sum tokens from gemini_call events per user (all-time)
+
+    // Cost: tokens from gemini_call events (always works)
     sb
       .from("api_logs")
       .select("user_id, token_count")
       .in("user_id", userIds)
       .eq("event_type", "gemini_call")
       .not("token_count", "is", null),
+
+    // Streak: optional columns from migration 006 — may fail gracefully
+    sb
+      .from("users")
+      .select("id, current_streak")
+      .in("id", userIds),
   ]);
 
-  // Aggregate activity per user: events in last 7 days + last active date
+  // Aggregate activity per user
   const activityMap = new Map<string, { count7d: number; lastActive: string | null }>();
   for (const row of activityResult.data || []) {
     const r = row as { user_id: string; created_at: string };
@@ -119,7 +126,16 @@ export async function GET(request: NextRequest) {
     costMap.set(r.user_id, existing);
   }
 
-  // Enrich user data
+  // Streak data (may be empty if migration not applied — streakResult.error is non-null)
+  const streakMap = new Map<string, number>();
+  if (!streakResult.error) {
+    for (const row of streakResult.data || []) {
+      const r = row as { id: string; current_streak: number };
+      streakMap.set(r.id, r.current_streak ?? 0);
+    }
+  }
+
+  // ── Step 3: Merge core + enrichment ──
   const enrichedUsers = users.map((u: Record<string, unknown>) => {
     const uid = u.id as string;
     const activity = activityMap.get(uid) || { count7d: 0, lastActive: null };
@@ -132,8 +148,7 @@ export async function GET(request: NextRequest) {
       line_user_id: u.line_user_id as string,
       subscription_tier: u.subscription_tier as string | null,
       subscription_expires_at: u.subscription_expires_at as string | null,
-      current_streak: (u.current_streak as number) ?? 0,
-      last_review_date: u.last_review_date as string | null,
+      current_streak: streakMap.get(uid) ?? 0,
       created_at: u.created_at as string,
       card_count: vocabCards?.[0]?.count ?? 0,
       activity_7d: activity.count7d,

@@ -640,13 +640,14 @@ export async function updateStreak(
 ): Promise<{ current_streak: number; longest_streak: number }> {
   const sb = getClient();
 
-  const { data: user } = await sb
+  const { data: user, error } = await sb
     .from("users")
     .select("current_streak, longest_streak, last_review_date")
     .eq("id", userId)
     .single();
 
-  if (!user) return { current_streak: 0, longest_streak: 0 };
+  // Graceful fallback if streak columns don't exist yet (migration not applied)
+  if (error || !user) return { current_streak: 0, longest_streak: 0 };
 
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
@@ -689,20 +690,22 @@ export async function updateStreak(
   return { current_streak: newStreak, longest_streak: newLongest };
 }
 
-/** Get user streak data. */
+/** Get user streak data. Returns zeros if streak columns don't exist yet. */
 export async function getStreak(
   userId: string
 ): Promise<{ current_streak: number; longest_streak: number }> {
   const sb = getClient();
-  const { data } = await sb
+  const { data, error } = await sb
     .from("users")
     .select("current_streak, longest_streak")
     .eq("id", userId)
     .single();
 
+  if (error || !data) return { current_streak: 0, longest_streak: 0 };
+
   return {
-    current_streak: data?.current_streak ?? 0,
-    longest_streak: data?.longest_streak ?? 0,
+    current_streak: data.current_streak ?? 0,
+    longest_streak: data.longest_streak ?? 0,
   };
 }
 
@@ -717,23 +720,26 @@ export async function getUserWordLists(
 }> {
   const sb = getClient();
 
-  // Manual lists with card counts
-  const { data: lists } = await sb
+  // Manual lists with card counts (word_lists table may not exist if migration 006 not applied)
+  let formattedLists: DbWordList[] = [];
+  const { data: lists, error: listsErr } = await sb
     .from("word_lists")
     .select("*, vocab_cards(count)")
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
 
-  const formattedLists: DbWordList[] = (lists || []).map((l: Record<string, unknown>) => ({
-    id: l.id as string,
-    user_id: l.user_id as string,
-    name: l.name as string,
-    emoji: l.emoji as string,
-    created_at: l.created_at as string,
-    card_count: Array.isArray(l.vocab_cards) && l.vocab_cards.length > 0
-      ? (l.vocab_cards[0] as { count: number }).count
-      : 0,
-  }));
+  if (!listsErr && lists) {
+    formattedLists = lists.map((l: Record<string, unknown>) => ({
+      id: l.id as string,
+      user_id: l.user_id as string,
+      name: l.name as string,
+      emoji: l.emoji as string,
+      created_at: l.created_at as string,
+      card_count: Array.isArray(l.vocab_cards) && l.vocab_cards.length > 0
+        ? (l.vocab_cards[0] as { count: number }).count
+        : 0,
+    }));
+  }
 
   // Language groups
   const { data: cards } = await sb
@@ -753,7 +759,7 @@ export async function getUserWordLists(
   return { lists: formattedLists, languageGroups };
 }
 
-/** Create a word list (free limit: 3). */
+/** Create a word list (free limit: 3). Returns error string if table doesn't exist. */
 export async function createWordList(
   userId: string,
   name: string,
@@ -763,14 +769,13 @@ export async function createWordList(
   const sb = getClient();
 
   if (tier === "free") {
-    const { count } = await sb
+    const { count, error: countErr } = await sb
       .from("word_lists")
       .select("*", { count: "exact", head: true })
       .eq("user_id", userId);
 
-    if ((count ?? 0) >= 3) {
-      return { error: "free_limit" };
-    }
+    if (countErr) return { error: "unavailable" };
+    if ((count ?? 0) >= 3) return { error: "free_limit" };
   }
 
   const { data, error } = await sb
@@ -779,7 +784,7 @@ export async function createWordList(
     .select()
     .single();
 
-  if (error) throw new Error(`Failed to create word list: ${error.message}`);
+  if (error) return { error: error.message };
   return { list: { ...(data as DbWordList), card_count: 0 } };
 }
 
@@ -789,17 +794,18 @@ export async function deleteWordList(
   userId: string
 ): Promise<boolean> {
   const sb = getClient();
-  const { data } = await sb
+  const { data, error } = await sb
     .from("word_lists")
     .delete()
     .eq("id", listId)
     .eq("user_id", userId)
     .select("id");
 
+  if (error) return false;
   return (data?.length ?? 0) > 0;
 }
 
-/** Assign cards to a word list. */
+/** Assign cards to a word list. Silently skips if list_id column doesn't exist. */
 export async function assignCardsToList(
   cardIds: string[],
   listId: string | null,
@@ -837,17 +843,29 @@ export async function getUsersWithDueCards(): Promise<
 
   const userIds = Array.from(userCounts.keys());
 
-  // Get user details
+  // Get user details — base columns always, streak column optional
   const { data: users } = await sb
     .from("users")
-    .select("id, line_user_id, display_name, current_streak")
+    .select("id, line_user_id, display_name")
     .in("id", userIds);
+
+  // Streak data fetched separately (may fail if migration 006 not applied)
+  const streakMap = new Map<string, number>();
+  const { data: streakRows, error: streakErr } = await sb
+    .from("users")
+    .select("id, current_streak")
+    .in("id", userIds);
+  if (!streakErr && streakRows) {
+    for (const r of streakRows as { id: string; current_streak: number }[]) {
+      streakMap.set(r.id, r.current_streak ?? 0);
+    }
+  }
 
   return (users || []).map((u: Record<string, unknown>) => ({
     id: u.id as string,
     line_user_id: u.line_user_id as string,
     display_name: u.display_name as string | null,
-    current_streak: (u.current_streak as number) ?? 0,
+    current_streak: streakMap.get(u.id as string) ?? 0,
     due_count: userCounts.get(u.id as string) || 0,
   }));
 }
