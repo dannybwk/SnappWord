@@ -1,19 +1,20 @@
 """
 LINE Webhook handler for SnappWord 截詞.
 
-Architecture: Async reply pattern
+Architecture: Inline async processing
 1. Receive image → reply "analyzing..." instantly (via reply token)
-2. Process in background task (within ASGI lifecycle) → push result via Push Message API
-3. Every failure path guarantees a user-facing message (no silent failures)
+2. Process inline (await) so Vercel keeps the function alive until completion
+3. Push result via Push Message API; every failure path guarantees a user-facing message
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from urllib.parse import parse_qs
 
-from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
+from fastapi import FastAPI, Request, HTTPException
 
 from _lib import config
 from _lib.models import ReviewStatus
@@ -52,10 +53,33 @@ GEMINI_TIMEOUT = 45
 
 app = FastAPI()
 
+# Simple in-memory dedup to handle LINE webhook retries.
+# Cleared on cold start, which is acceptable.
+_processed_events: dict[str, float] = {}
+_DEDUP_WINDOW = 60  # seconds
+
+
+def _is_duplicate(event_id: str) -> bool:
+    """Return True if this webhook event was already processed recently."""
+    now = time.time()
+    # Clean expired entries
+    expired = [k for k, v in _processed_events.items() if now - v > _DEDUP_WINDOW]
+    for k in expired:
+        del _processed_events[k]
+    if event_id in _processed_events:
+        return True
+    _processed_events[event_id] = now
+    return False
+
 
 @app.post("/api/webhook")
-async def webhook(request: Request, background_tasks: BackgroundTasks) -> dict:
-    """LINE Webhook endpoint."""
+async def webhook(request: Request) -> dict:
+    """LINE Webhook endpoint.
+
+    Events are processed inline (awaited) so Vercel keeps the serverless
+    function alive for the full duration.  Using BackgroundTasks would cause
+    Vercel to kill the process right after the response is sent.
+    """
     body = await request.body()
     signature = request.headers.get("X-Line-Signature", "")
 
@@ -66,7 +90,11 @@ async def webhook(request: Request, background_tasks: BackgroundTasks) -> dict:
     events = payload.get("events", [])
 
     for event in events:
-        background_tasks.add_task(_handle_event, event)
+        event_id = event.get("webhookEventId", "")
+        if event_id and _is_duplicate(event_id):
+            logger.info("Skipping duplicate event %s", event_id)
+            continue
+        await _handle_event(event)
 
     return {"status": "ok"}
 
