@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from datetime import datetime, timezone
 from urllib.parse import parse_qs
 
 from fastapi import FastAPI, Request, HTTPException
@@ -275,10 +276,17 @@ async def _process_screenshot(line_user_id: str, message_id: str) -> None:
                     )
                 ])
             elif quota["reason"] == "monthly_quota":
+                # Calculate next month's first day for reset date
+                now = datetime.now(timezone.utc)
+                if now.month == 12:
+                    reset_date = now.replace(year=now.year + 1, month=1, day=1)
+                else:
+                    reset_date = now.replace(month=now.month + 1, day=1)
+                reset_str = reset_date.strftime("%-m/%-d")
                 await push_message(line_user_id, [
                     build_error_message(
                         f"📊 本月已使用 {quota['monthly_used']}/{int(quota['monthly_limit'])} 張截圖額度\n"
-                        "額度已用完，下個月會自動重置！\n\n"
+                        f"額度已用完，{reset_str} 會自動重置，届時可再度使用！\n\n"
                         "💎 升級方案可獲得更多額度：\nsnappword.com/pricing"
                     )
                 ])
