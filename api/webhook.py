@@ -2,8 +2,9 @@
 LINE Webhook handler for SnappWord 截詞.
 
 Architecture: Async reply pattern
-1. Receive image → reply "analyzing..." instantly
-2. Process in background → push result via Push Message API
+1. Receive image → reply "analyzing..." instantly (via reply token)
+2. Process in background task (within ASGI lifecycle) → push result via Push Message API
+3. Every failure path guarantees a user-facing message (no silent failures)
 """
 
 from __future__ import annotations
@@ -44,6 +45,11 @@ from _lib.flex_messages import (
 
 logger = logging.getLogger(__name__)
 
+# Timeout for the Gemini API call (seconds).
+# Must be well under Vercel's maxDuration (60s) to leave room for
+# the error-handling push message if it times out.
+GEMINI_TIMEOUT = 45
+
 app = FastAPI()
 
 
@@ -65,9 +71,53 @@ async def webhook(request: Request, background_tasks: BackgroundTasks) -> dict:
     return {"status": "ok"}
 
 
+# ── Helpers ──────────────────────────────────────────────────────────
+
+
+async def _safe_push(user_id: str, messages: list[dict]) -> None:
+    """Push message with error suppression — never raises."""
+    try:
+        await push_message(user_id, messages)
+    except Exception:
+        logger.exception("Failed to push message to %s", user_id)
+
+
+async def _safe_log(user_id: str | None, event_type: str, **kwargs) -> None:
+    """Log event with error suppression — never raises."""
+    try:
+        await asyncio.to_thread(log_event, user_id, event_type, **kwargs)
+    except Exception:
+        logger.exception("Failed to log event %s", event_type)
+
+
+async def _notify_admin_error(user_display: str, error_msg: str) -> None:
+    """Notify admin about a processing failure so no user is left hanging."""
+    if not config.ADMIN_LINE_USER_ID:
+        return
+    try:
+        await push_message(config.ADMIN_LINE_USER_ID, [
+            build_error_message(
+                f"⚠️ 處理失敗通知\n\n"
+                f"用戶：{user_display}\n"
+                f"錯誤：{error_msg[:100]}"
+            )
+        ])
+    except Exception:
+        logger.exception("Failed to notify admin about error")
+
+
+# ── Event Router ─────────────────────────────────────────────────────
+
+
 async def _handle_event(event: dict) -> None:
-    """Route event to appropriate handler."""
+    """Route event to appropriate handler.
+
+    Safety-net: if anything fails, try to send an error message to the
+    user so they are never left with just "正在解析..." and no follow-up.
+    """
     event_type = event.get("type")
+    line_user_id = event.get("source", {}).get("userId")
+
     try:
         if event_type == "follow":
             await _handle_follow(event)
@@ -77,6 +127,16 @@ async def _handle_event(event: dict) -> None:
             await _handle_postback(event)
     except Exception:
         logger.exception("Unhandled error in event handler")
+        # Safety net: notify user so they're not left waiting forever
+        if line_user_id:
+            await _safe_push(line_user_id, [
+                build_error_message(
+                    "處理時發生未預期的錯誤 😅\n請稍後重試一次。"
+                )
+            ])
+
+
+# ── Follow ───────────────────────────────────────────────────────────
 
 
 async def _handle_follow(event: dict) -> None:
@@ -108,6 +168,9 @@ async def _handle_follow(event: dict) -> None:
     )
 
 
+# ── Message ──────────────────────────────────────────────────────────
+
+
 async def _handle_message(event: dict) -> None:
     """Handle incoming messages (image or text)."""
     message = event.get("message", {})
@@ -123,7 +186,7 @@ async def _handle_message(event: dict) -> None:
         # Step 1: Immediately reply with loading indicator
         await reply_loading(reply_token)
 
-        # Step 2: Process asynchronously, then push result
+        # Step 2: Process — errors are handled inside and always push a message
         await _process_screenshot(line_user_id, message["id"])
 
     elif msg_type == "text":
@@ -138,7 +201,10 @@ async def _handle_message(event: dict) -> None:
 
 
 async def _process_screenshot(line_user_id: str, message_id: str) -> None:
-    """Full pipeline: download → upload → AI analyze → store → push card."""
+    """Full pipeline: download → upload → AI analyze → store → push card.
+
+    Guarantees: the user ALWAYS receives a push message (success or error).
+    """
     # Fetch LINE profile for display name
     profile = await get_user_profile(line_user_id)
     display_name = profile["displayName"] if profile else None
@@ -160,7 +226,7 @@ async def _process_screenshot(line_user_id: str, message_id: str) -> None:
             # Notify admin via LINE
             if config.ADMIN_LINE_USER_ID:
                 tier = upgrade_req.get("tier", "unknown")
-                await push_message(config.ADMIN_LINE_USER_ID, [
+                await _safe_push(config.ADMIN_LINE_USER_ID, [
                     build_error_message(
                         f"🔔 新付費通知\n\n"
                         f"用戶：{display_name or line_user_id}\n"
@@ -193,21 +259,33 @@ async def _process_screenshot(line_user_id: str, message_id: str) -> None:
         # Download image from LINE
         image_bytes = await get_message_content(message_id)
 
-        await asyncio.to_thread(
-            log_event, user_id, "image_received",
+        await _safe_log(
+            user_id, "image_received",
             payload={"message_id": message_id},
         )
 
         # Upload to Supabase Storage
         image_url = await asyncio.to_thread(upload_image, image_bytes, user_id)
 
-        # AI analysis
-        parse_result, metadata = await asyncio.to_thread(
-            analyze_screenshot, image_bytes
-        )
+        # AI analysis — with explicit timeout so we never hang forever
+        try:
+            parse_result, metadata = await asyncio.wait_for(
+                asyncio.to_thread(analyze_screenshot, image_bytes),
+                timeout=GEMINI_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            logger.error("Gemini API timed out for user %s", user_id)
+            await _safe_log(user_id, "parse_fail", payload={"error": "Gemini timeout"})
+            await _safe_push(line_user_id, [
+                build_error_message(
+                    "AI 分析超時了 ⏱\n請稍後重試一次！"
+                )
+            ])
+            await _notify_admin_error(display_name or line_user_id, "Gemini API timeout")
+            return
 
-        await asyncio.to_thread(
-            log_event, user_id, "gemini_call",
+        await _safe_log(
+            user_id, "gemini_call",
             latency_ms=metadata.get("latency_ms"),
             token_count=metadata.get("token_count"),
             payload={"word_count": len(parse_result.words)},
@@ -227,8 +305,8 @@ async def _process_screenshot(line_user_id: str, message_id: str) -> None:
             save_vocab_cards, user_id, image_url, parse_result
         )
 
-        await asyncio.to_thread(
-            log_event, user_id, "parse_success",
+        await _safe_log(
+            user_id, "parse_success",
             payload={
                 "cards_saved": len(saved_cards),
                 "source_app": parse_result.source_app,
@@ -245,15 +323,16 @@ async def _process_screenshot(line_user_id: str, message_id: str) -> None:
 
     except Exception as e:
         logger.exception("Failed to process screenshot for user %s", user_id)
-        await asyncio.to_thread(
-            log_event, user_id, "parse_fail",
-            payload={"error": str(e)},
-        )
-        await push_message(line_user_id, [
+        await _safe_log(user_id, "parse_fail", payload={"error": str(e)})
+        await _safe_push(line_user_id, [
             build_error_message(
                 "處理截圖時發生錯誤 😅\n請稍後重試，或換一張更清晰的截圖。"
             )
         ])
+        await _notify_admin_error(display_name or line_user_id, str(e))
+
+
+# ── Text Commands ────────────────────────────────────────────────────
 
 
 async def _handle_text_command(reply_token: str, line_user_id: str, text: str) -> None:
@@ -285,6 +364,9 @@ async def _handle_text_command(reply_token: str, line_user_id: str, text: str) -
             "📸 請傳送截圖給我，我來幫你提取單字！\n"
             "輸入「幫助」查看使用說明。",
         )
+
+
+# ── Postback ─────────────────────────────────────────────────────────
 
 
 async def _handle_postback(event: dict) -> None:

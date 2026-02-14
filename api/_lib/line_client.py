@@ -15,6 +15,9 @@ logger = logging.getLogger(__name__)
 
 LINE_API_BASE = "https://api.line.me/v2/bot"
 
+# Shared timeout for all LINE API calls (connect + read)
+_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
+
 
 def verify_signature(body: bytes, signature: str) -> bool:
     """Verify LINE webhook signature."""
@@ -38,7 +41,7 @@ def _headers() -> dict[str, str]:
 
 async def reply_message(reply_token: str, messages: list[dict]) -> None:
     """Send reply using reply token (must be within 30s of webhook)."""
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         resp = await client.post(
             f"{LINE_API_BASE}/message/reply",
             headers=_headers(),
@@ -50,7 +53,7 @@ async def reply_message(reply_token: str, messages: list[dict]) -> None:
 
 async def push_message(user_id: str, messages: list[dict]) -> None:
     """Send push message to a user (no time limit)."""
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         resp = await client.post(
             f"{LINE_API_BASE}/message/push",
             headers=_headers(),
@@ -63,7 +66,8 @@ async def push_message(user_id: str, messages: list[dict]) -> None:
 async def get_message_content(message_id: str) -> bytes:
     """Download image/file content from LINE servers."""
     url = f"https://api-data.line.me/v2/bot/message/{message_id}/content"
-    async with httpx.AsyncClient() as client:
+    # Image downloads may be larger, allow more time
+    async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=5.0)) as client:
         resp = await client.get(url, headers=_headers())
         resp.raise_for_status()
         return resp.content
@@ -71,7 +75,7 @@ async def get_message_content(message_id: str) -> bytes:
 
 async def get_user_profile(user_id: str) -> dict | None:
     """Get user profile from LINE (display name, picture URL)."""
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         resp = await client.get(
             f"{LINE_API_BASE}/profile/{user_id}",
             headers=_headers(),
